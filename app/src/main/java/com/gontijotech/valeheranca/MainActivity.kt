@@ -74,8 +74,8 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Injeta CSS e JavaScript para forçar apenas a exibição
-     * do jogo e ocultar barras de navegação externas.
+     * Injeta regras de CSS e JavaScript para forçar o canvas
+     * a esticar completamente (fill) e cobrir as barras pretas.
      */
     private fun aplicarModoSomenteJogo(view: WebView) {
         val javascript = """
@@ -86,7 +86,6 @@ class MainActivity : Activity() {
                     var style = document.createElement('style');
                     style.id = estiloId;
                     style.innerHTML = `
-                        /* Oculta barras de navegacao, menus e rodapes */
                         nav, footer, header,
                         [class*="bottom-bar" i], [class*="navigation" i], 
                         [class*="tab-bar" i], [class*="footer" i],
@@ -103,23 +102,23 @@ class MainActivity : Activity() {
                             background-color: #000 !important;
                         }
 
-                        /* Expande o canvas para ocupar o ecra inteiro */
+                        /* Estica o canvas por completo para eliminar as margens superior e inferior */
                         canvas {
                             position: fixed !important;
-                            top: 0 !important;
-                            left: 0 !important;
+                            top: 0px !important;
+                            left: 0px !important;
                             width: 100vw !important;
                             height: 100vh !important;
                             max-width: 100vw !important;
                             max-height: 100vh !important;
                             z-index: 2147483647 !important;
-                            object-fit: contain !important;
+                            object-fit: fill !important;
                         }
                     `;
                     document.head.appendChild(style);
                 }
 
-                function isolarAreaJogo() {
+                function ajustarJogo() {
                     var canvases = document.querySelectorAll('canvas');
                     for (var i = 0; i < canvases.length; i++) {
                         var c = canvases[i];
@@ -132,19 +131,22 @@ class MainActivity : Activity() {
                             c.style.setProperty('width', '100vw', 'important');
                             c.style.setProperty('height', '100vh', 'important');
                             c.style.setProperty('z-index', '2147483647', 'important');
-                            c.style.setProperty('object-fit', 'contain', 'important');
+                            c.style.setProperty('object-fit', 'fill', 'important');
+
+                            // Dispara evento de resize para o motor recalcular a renderização
+                            window.dispatchEvent(new Event('resize'));
                             return true;
                         }
                     }
                     return false;
                 }
 
-                if (isolarAreaJogo()) return;
+                if (ajustarJogo()) return;
 
                 var tentativas = 0;
                 var timer = setInterval(function() {
                     tentativas++;
-                    if (isolarAreaJogo() || tentativas > 30) {
+                    if (ajustarJogo() || tentativas > 30) {
                         clearInterval(timer);
                     }
                 }, 500);
