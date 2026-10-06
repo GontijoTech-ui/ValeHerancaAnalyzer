@@ -1,6 +1,5 @@
 package com.gontijotech.valeheranca
 
-
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -60,385 +59,500 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-
 class AnalyzerBridge(
-private val onLog: (String) -> Unit
+    private val onLog: (String) -> Unit
 ) {
 
+    @JavascriptInterface
+    fun log(message: String) {
+        onLog("[JS] $message")
+    }
 
-@JavascriptInterface
-fun log(message: String) {
-    onLog("[JS] $message")
+    @JavascriptInterface
+    fun sendData(data: String) {
+        onLog("[DATA] $data")
+    }
 }
-
-@JavascriptInterface
-fun sendData(data: String) {
-    onLog("[DATA] $data")
-}
-
-
-
-}
-
 
 class MainActivity : ComponentActivity() {
 
+    private val logs = mutableStateListOf<String>()
 
-private val logs = mutableStateListOf<String>()
+    private var webViewInstance: WebView? = null
 
-private var webViewInstance: WebView? = null
+    private var lastSavedFileName: String? = null
 
-private var lastSavedFileName: String? = null
+    private val gameUrl =
+        "https://www.astrocade.com/games/vale-da-heran%C3%A7a-renova%C3%A7%C3%A3o/01M46K2HXGZ4F46MRCKS6WTQ6Y"
 
-private val gameUrl =
-    "https://www.astrocade.com/games/vale-da-heran%C3%A7a-renova%C3%A7%C3%A3o/01M46K2HXGZ4F46MRCKS6WTQ6Y"
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+        appendLog("==============================================")
+        appendLog("VALE HERANÇA ANALYZER")
+        appendLog("Inicializando analisador...")
+        appendLog("URL: $gameUrl")
+        appendLog("==============================================")
 
-    appendLog("==============================================")
-    appendLog("VALE HERANÇA ANALYZER")
-    appendLog("Inicializando analisador...")
-    appendLog("URL: $gameUrl")
-    appendLog("==============================================")
+        setContent {
 
-    setContent {
+            MaterialTheme {
 
-        MaterialTheme {
-
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = Color.Black
-            ) {
-
-                var showConsole by remember {
-                    mutableStateOf(false)
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxSize()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color.Black
                 ) {
 
-                    ControlBar(
-                        showConsole = showConsole,
+                    var showConsole by remember {
+                        mutableStateOf(false)
+                    }
 
-                        onToggleConsole = {
-                            showConsole = !showConsole
-                        },
-
-                        onReload = {
-                            appendLog("[UI] Recarregando WebView...")
-                            webViewInstance?.reload()
-                        },
-
-                        onClearLogs = {
-                            logs.clear()
-                            appendLog("[UI] Log limpo.")
-                        },
-
-                        onSaveLog = {
-                            saveLogToDownloads()
-                        },
-
-                        onCopyLog = {
-                            copyLogsToClipboard()
-                        }
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                    Column(
+                        modifier = Modifier.fillMaxSize()
                     ) {
 
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
+                        ControlBar(
+                            showConsole = showConsole,
 
-                            factory = { context ->
+                            onToggleConsole = {
+                                showConsole = !showConsole
+                            },
 
-                                WebView(context).apply {
+                            onReload = {
+                                appendLog(
+                                    "[UI] Recarregando WebView..."
+                                )
 
-                                    layoutParams =
-                                        ViewGroup.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                /*
+                                 * reload() também é uma chamada WebView.
+                                 *
+                                 * Garantimos que aconteça na thread
+                                 * da própria WebView.
+                                 */
+                                webViewInstance?.post {
+
+                                    try {
+                                        webViewInstance?.reload()
+                                    } catch (e: Exception) {
+
+                                        appendLog(
+                                            "[WEBVIEW ERROR] reload: ${e.message}"
                                         )
-
-                                    setBackgroundColor(
-                                        AndroidColor.BLACK
-                                    )
-
-                                    configureWebView(this)
-
-                                    addJavascriptInterface(
-                                        AnalyzerBridge {
-                                            appendLog(it)
-                                        },
-                                        "AnalyzerBridge"
-                                    )
-
-                                    appendLog(
-                                        "[WEBVIEW] Carregando página do jogo..."
-                                    )
-
-                                    webViewInstance = this
-
-                                    loadUrl(gameUrl)
+                                    }
                                 }
+                            },
+
+                            onClearLogs = {
+
+                                /*
+                                 * Botão da UI já está na main thread.
+                                 */
+                                logs.clear()
+
+                                appendLog(
+                                    "[UI] Log limpo."
+                                )
+                            },
+
+                            onSaveLog = {
+                                saveLogToDownloads()
+                            },
+
+                            onCopyLog = {
+                                copyLogsToClipboard()
                             }
                         )
-                    }
 
-                    if (showConsole) {
-
-                        ConsoleView(
-                            logs = logs,
+                        Box(
                             modifier = Modifier
+                                .weight(1f)
                                 .fillMaxWidth()
-                                .height(260.dp)
+                        ) {
+
+                            AndroidView(
+                                modifier = Modifier.fillMaxSize(),
+
+                                factory = { context ->
+
+                                    WebView(context).apply {
+
+                                        layoutParams =
+                                            ViewGroup.LayoutParams(
+                                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                            )
+
+                                        setBackgroundColor(
+                                            AndroidColor.BLACK
+                                        )
+
+                                        configureWebView(this)
+
+                                        addJavascriptInterface(
+                                            AnalyzerBridge {
+                                                appendLog(it)
+                                            },
+                                            "AnalyzerBridge"
+                                        )
+
+                                        appendLog(
+                                            "[WEBVIEW] Carregando página do jogo..."
+                                        )
+
+                                        webViewInstance = this
+
+                                        loadUrl(gameUrl)
+                                    }
+                                }
+                            )
+                        }
+
+                        if (showConsole) {
+
+                            ConsoleView(
+                                logs = logs,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(260.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Todos os logs são adicionados na UI thread.
+     *
+     * Isso é importante porque:
+     *
+     * - shouldInterceptRequest pode estar fora da UI thread
+     * - JavascriptInterface possui sua própria thread
+     * - callbacks de WebView podem chegar em momentos diferentes
+     */
+    private fun appendLog(message: String) {
+
+        runOnUiThread {
+
+            val time = SimpleDateFormat(
+                "HH:mm:ss.SSS",
+                Locale.US
+            ).format(Date())
+
+            logs.add(
+                "[$time] $message"
+            )
+        }
+    }
+
+    // ============================================================
+    // WEBVIEW CONFIGURATION
+    // ============================================================
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun configureWebView(
+        wv: WebView
+    ) {
+
+        wv.settings.apply {
+
+            javaScriptEnabled = true
+
+            domStorageEnabled = true
+
+            databaseEnabled = true
+
+            allowFileAccess = true
+
+            allowContentAccess = true
+
+            useWideViewPort = true
+
+            loadWithOverviewMode = false
+
+            mediaPlaybackRequiresUserGesture = false
+
+            javaScriptCanOpenWindowsAutomatically = true
+
+            setSupportMultipleWindows(true)
+
+            cacheMode = WebSettings.LOAD_DEFAULT
+
+            userAgentString =
+                "$userAgentString ValeHerancaAnalyzer/1.0"
+        }
+
+        appendLog(
+            "[WEBVIEW] JavaScript habilitado."
+        )
+
+        appendLog(
+            "[WEBVIEW] DOM Storage habilitado."
+        )
+
+        wv.webViewClient = object : WebViewClient() {
+
+            override fun onPageStarted(
+                view: WebView?,
+                url: String?,
+                favicon: Bitmap?
+            ) {
+
+                appendLog(
+                    "[PAGE START] $url"
+                )
+
+                /*
+                 * NÃO chamamos evaluateJavascript diretamente.
+                 *
+                 * scheduleAnalyzerInjection usa view.post().
+                 */
+                scheduleAnalyzerInjection(view)
+            }
+
+            override fun onPageFinished(
+                view: WebView?,
+                url: String?
+            ) {
+
+                appendLog(
+                    "[PAGE FINISHED] $url"
+                )
+
+                appendLog(
+                    "[PAGE] Injetando analisador JavaScript..."
+                )
+
+                scheduleAnalyzerInjection(view)
+            }
+
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+
+                /*
+                 * IMPORTANTE:
+                 *
+                 * Este callback pode acontecer em thread de
+                 * background.
+                 *
+                 * Portanto aqui só fazemos LEITURA da requisição
+                 * e enviamos texto para appendLog().
+                 *
+                 * Não chamamos nenhum método da WebView.
+                 */
+
+                if (request != null) {
+
+                    val url =
+                        request.url.toString()
+
+                    val method =
+                        request.method
+
+                    val headers =
+                        request.requestHeaders
+
+                    appendLog(
+                        "[REQUEST] $method $url"
+                    )
+
+                    if (headers.isNotEmpty()) {
+
+                        appendLog(
+                            "[REQUEST HEADERS] " +
+                                headers.entries.joinToString()
                         )
                     }
                 }
-            }
-        }
-    }
-}
 
-fun appendLog(message: String) {
-
-    runOnUiThread {
-
-        val time = SimpleDateFormat(
-            "HH:mm:ss.SSS",
-            Locale.US
-        ).format(Date())
-
-        logs.add(
-            "[$time] $message"
-        )
-    }
-}
-
-@SuppressLint("SetJavaScriptEnabled")
-private fun configureWebView(wv: WebView) {
-
-    wv.settings.apply {
-
-        javaScriptEnabled = true
-
-        domStorageEnabled = true
-
-        databaseEnabled = true
-
-        allowFileAccess = true
-
-        allowContentAccess = true
-
-        useWideViewPort = true
-
-        loadWithOverviewMode = false
-
-        mediaPlaybackRequiresUserGesture = false
-
-        javaScriptCanOpenWindowsAutomatically = true
-
-        setSupportMultipleWindows(true)
-
-        cacheMode = WebSettings.LOAD_DEFAULT
-
-        userAgentString =
-            "$userAgentString ValeHerancaAnalyzer/1.0"
-    }
-
-    appendLog(
-        "[WEBVIEW] JavaScript habilitado."
-    )
-
-    appendLog(
-        "[WEBVIEW] DOM Storage habilitado."
-    )
-
-    wv.webViewClient = object : WebViewClient() {
-
-        override fun onPageStarted(
-            view: WebView?,
-            url: String?,
-            favicon: Bitmap?
-        ) {
-
-            appendLog(
-                "[PAGE START] $url"
-            )
-
-            injectAnalyzerJavascript(view)
-        }
-
-        override fun onPageFinished(
-            view: WebView?,
-            url: String?
-        ) {
-
-            appendLog(
-                "[PAGE FINISHED] $url"
-            )
-
-            appendLog(
-                "[PAGE] Injetando analisador JavaScript..."
-            )
-
-            injectAnalyzerJavascript(view)
-        }
-
-        override fun shouldInterceptRequest(
-            view: WebView?,
-            request: WebResourceRequest?
-        ): WebResourceResponse? {
-
-            if (request != null) {
-
-                val url =
-                    request.url.toString()
-
-                val method =
-                    request.method
-
-                val headers =
-                    request.requestHeaders
-
-                appendLog(
-                    "[REQUEST] $method $url"
-                )
-
-                if (headers.isNotEmpty()) {
-
-                    appendLog(
-                        "[REQUEST HEADERS] ${headers.entries.joinToString()}"
-                    )
-                }
-            }
-
-            return super.shouldInterceptRequest(
-                view,
-                request
-            )
-        }
-
-        @Suppress("DEPRECATION")
-        override fun shouldInterceptRequest(
-            view: WebView?,
-            url: String?
-        ): WebResourceResponse? {
-
-            if (!url.isNullOrBlank()) {
-
-                appendLog(
-                    "[REQUEST-LEGACY] $url"
+                return super.shouldInterceptRequest(
+                    view,
+                    request
                 )
             }
 
-            return super.shouldInterceptRequest(
-                view,
-                url
-            )
-        }
-
-        override fun doUpdateVisitedHistory(
-            view: WebView?,
-            url: String?,
-            isReload: Boolean
-        ) {
-
-            appendLog(
-                "[HISTORY] url=$url reload=$isReload"
-            )
-
-            super.doUpdateVisitedHistory(
-                view,
-                url,
-                isReload
-            )
-        }
-
-        override fun onPageCommitVisible(
-            view: WebView?,
-            url: String?
-        ) {
-
-            appendLog(
-                "[PAGE VISIBLE] $url"
-            )
-
-            super.onPageCommitVisible(
-                view,
-                url
-            )
-        }
-    }
-
-    wv.webChromeClient =
-        object : WebChromeClient() {
-
-            override fun onConsoleMessage(
-                consoleMessage: ConsoleMessage?
-            ): Boolean {
-
-                consoleMessage?.let {
-
-                    appendLog(
-                        "[CONSOLE] ${it.message()} (${it.sourceId()}:${it.lineNumber()})"
-                    )
-                }
-
-                return true
-            }
-
-            override fun onProgressChanged(
+            @Suppress("DEPRECATION")
+            override fun shouldInterceptRequest(
                 view: WebView?,
-                newProgress: Int
+                url: String?
+            ): WebResourceResponse? {
+
+                if (!url.isNullOrBlank()) {
+
+                    appendLog(
+                        "[REQUEST-LEGACY] $url"
+                    )
+                }
+
+                return super.shouldInterceptRequest(
+                    view,
+                    url
+                )
+            }
+
+            override fun doUpdateVisitedHistory(
+                view: WebView?,
+                url: String?,
+                isReload: Boolean
             ) {
 
-                if (
-                    newProgress == 10 ||
-                    newProgress == 25 ||
-                    newProgress == 50 ||
-                    newProgress == 75 ||
-                    newProgress == 90 ||
-                    newProgress == 100
-                ) {
+                appendLog(
+                    "[HISTORY] url=$url reload=$isReload"
+                )
 
-                    appendLog(
-                        "[PROGRESS] $newProgress%"
-                    )
-                }
-
-                super.onProgressChanged(
+                super.doUpdateVisitedHistory(
                     view,
-                    newProgress
+                    url,
+                    isReload
+                )
+            }
+
+            override fun onPageCommitVisible(
+                view: WebView?,
+                url: String?
+            ) {
+
+                appendLog(
+                    "[PAGE VISIBLE] $url"
+                )
+
+                super.onPageCommitVisible(
+                    view,
+                    url
                 )
             }
         }
-}
 
-private fun injectAnalyzerJavascript(
-    view: WebView?
-) {
+        wv.webChromeClient =
+            object : WebChromeClient() {
 
-    if (view == null) {
-        return
+                override fun onConsoleMessage(
+                    consoleMessage: ConsoleMessage?
+                ): Boolean {
+
+                    consoleMessage?.let {
+
+                        appendLog(
+                            "[CONSOLE] " +
+                                "${it.message()} " +
+                                "(${it.sourceId()}:${it.lineNumber()})"
+                        )
+                    }
+
+                    return true
+                }
+
+                override fun onProgressChanged(
+                    view: WebView?,
+                    newProgress: Int
+                ) {
+
+                    if (
+                        newProgress == 10 ||
+                        newProgress == 25 ||
+                        newProgress == 50 ||
+                        newProgress == 75 ||
+                        newProgress == 90 ||
+                        newProgress == 100
+                    ) {
+
+                        appendLog(
+                            "[PROGRESS] $newProgress%"
+                        )
+                    }
+
+                    super.onProgressChanged(
+                        view,
+                        newProgress
+                    )
+                }
+            }
     }
 
-    val script = """
+    // ============================================================
+    // SAFE JAVASCRIPT INJECTION
+    // ============================================================
+
+    private fun scheduleAnalyzerInjection(
+        view: WebView?
+    ) {
+
+        if (view == null) {
+            return
+        }
+
+        /*
+         * WebView.post() coloca a execução na fila da UI thread
+         * da própria WebView.
+         *
+         * Isso resolve o erro:
+         *
+         * "A WebView method was called on thread 'Thread-4'."
+         */
+
+        view.post {
+
+            try {
+
+                if (isFinishing) {
+                    return@post
+                }
+
+                if (
+                    Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.JELLY_BEAN_MR1
+                ) {
+
+                    if (isDestroyed) {
+                        return@post
+                    }
+                }
+
+                val script =
+                    createAnalyzerJavascript()
+
+                view.evaluateJavascript(
+                    script,
+                    null
+                )
+
+                appendLog(
+                    "[JS] evaluateJavascript enviado para UI thread."
+                )
+
+            } catch (e: Exception) {
+
+                appendLog(
+                    "[JS ERROR] " +
+                        "${e.javaClass.simpleName}: ${e.message}"
+                )
+            }
+        }
+    }
+
+    private fun createAnalyzerJavascript(): String {
+
+        return """
         (function() {
 
             if (window.__VALE_HERANCA_ANALYZER__) {
-                console.log("ValeHerancaAnalyzer já instalado.");
+
+                console.log(
+                    "ValeHerancaAnalyzer já instalado."
+                );
+
                 return;
             }
 
             window.__VALE_HERANCA_ANALYZER__ = true;
 
             function safeString(value) {
+
                 try {
+
                     if (typeof value === "string") {
                         return value;
                     }
@@ -452,7 +566,9 @@ private fun injectAnalyzerJavascript(
                     }
 
                     return JSON.stringify(value);
+
                 } catch (e) {
+
                     return String(value);
                 }
             }
@@ -504,63 +620,73 @@ private fun injectAnalyzerJavascript(
                 var originalFetch =
                     window.fetch;
 
-                window.fetch =
-                    function() {
+                if (originalFetch) {
 
-                        var args =
-                            Array.prototype.slice.call(
-                                arguments
+                    window.fetch =
+                        function() {
+
+                            var args =
+                                Array.prototype.slice.call(
+                                    arguments
+                                );
+
+                            var input =
+                                args[0];
+
+                            var url =
+                                typeof input === "string"
+                                    ? input
+                                    : (
+                                        input &&
+                                        input.url
+                                        ? input.url
+                                        : String(input)
+                                    );
+
+                            send(
+                                "FETCH",
+                                "REQUEST " + url
                             );
 
-                        var input =
-                            args[0];
+                            return originalFetch
+                                .apply(
+                                    this,
+                                    arguments
+                                )
+                                .then(
+                                    function(response) {
 
-                        var url =
-                            typeof input === "string"
-                                ? input
-                                : (
-                                    input &&
-                                    input.url
-                                    ? input.url
-                                    : String(input)
+                                        send(
+                                            "FETCH",
+                                            "RESPONSE " +
+                                            response.status +
+                                            " " +
+                                            response.url
+                                        );
+
+                                        return response;
+
+                                    }
+                                )
+                                .catch(
+                                    function(error) {
+
+                                        send(
+                                            "FETCH",
+                                            "ERROR " +
+                                            safeString(error)
+                                        );
+
+                                        throw error;
+                                    }
                                 );
+                        };
 
-                        send(
-                            "FETCH",
-                            "REQUEST " + url
-                        );
-
-                        return originalFetch
-                            .apply(this, arguments)
-                            .then(function(response) {
-
-                                send(
-                                    "FETCH",
-                                    "RESPONSE " +
-                                    response.status +
-                                    " " +
-                                    response.url
-                                );
-
-                                return response;
-
-                            })
-                            .catch(function(error) {
-
-                                send(
-                                    "FETCH",
-                                    "ERROR " +
-                                    safeString(error)
-                                );
-
-                                throw error;
-                            });
-                    };
-
-                send(
-                    "HOOK",
-                    "fetch interceptado"
-                );
+                    send(
+                        "HOOK",
+                        "fetch interceptado"
+                    );
+                }
 
             } catch (e) {
 
@@ -655,94 +781,100 @@ private fun injectAnalyzerJavascript(
                 var OriginalWebSocket =
                     window.WebSocket;
 
-                window.WebSocket =
-                    function(url, protocols) {
+                if (OriginalWebSocket) {
 
-                        send(
-                            "WEBSOCKET",
-                            "CONNECT " +
-                            url
-                        );
+                    window.WebSocket =
+                        function(
+                            url,
+                            protocols
+                        ) {
 
-                        var socket;
+                            send(
+                                "WEBSOCKET",
+                                "CONNECT " + url
+                            );
 
-                        if (protocols !== undefined) {
+                            var socket;
 
-                            socket =
-                                new OriginalWebSocket(
-                                    url,
-                                    protocols
-                                );
+                            if (
+                                protocols !== undefined
+                            ) {
 
-                        } else {
+                                socket =
+                                    new OriginalWebSocket(
+                                        url,
+                                        protocols
+                                    );
 
-                            socket =
-                                new OriginalWebSocket(
-                                    url
-                                );
-                        }
+                            } else {
 
-                        socket.addEventListener(
-                            "open",
-                            function() {
-
-                                send(
-                                    "WEBSOCKET",
-                                    "OPEN " +
-                                    url
-                                );
+                                socket =
+                                    new OriginalWebSocket(
+                                        url
+                                    );
                             }
-                        );
 
-                        socket.addEventListener(
-                            "message",
-                            function(event) {
+                            socket.addEventListener(
+                                "open",
+                                function() {
 
-                                send(
-                                    "WEBSOCKET MESSAGE",
-                                    safeString(
-                                        event.data
-                                    )
-                                );
-                            }
-                        );
+                                    send(
+                                        "WEBSOCKET",
+                                        "OPEN " + url
+                                    );
+                                }
+                            );
 
-                        socket.addEventListener(
-                            "close",
-                            function(event) {
+                            socket.addEventListener(
+                                "message",
+                                function(event) {
 
-                                send(
-                                    "WEBSOCKET",
-                                    "CLOSE " +
-                                    url +
-                                    " code=" +
-                                    event.code
-                                );
-                            }
-                        );
+                                    send(
+                                        "WEBSOCKET MESSAGE",
+                                        safeString(
+                                            event.data
+                                        )
+                                    );
+                                }
+                            );
 
-                        socket.addEventListener(
-                            "error",
-                            function() {
+                            socket.addEventListener(
+                                "close",
+                                function(event) {
 
-                                send(
-                                    "WEBSOCKET",
-                                    "ERROR " +
-                                    url
-                                );
-                            }
-                        );
+                                    send(
+                                        "WEBSOCKET",
+                                        "CLOSE " +
+                                        url +
+                                        " code=" +
+                                        event.code
+                                    );
+                                }
+                            );
 
-                        return socket;
-                    };
+                            socket.addEventListener(
+                                "error",
+                                function() {
 
-                window.WebSocket.prototype =
-                    OriginalWebSocket.prototype;
+                                    send(
+                                        "WEBSOCKET",
+                                        "ERROR " +
+                                        url
+                                    );
+                                }
+                            );
 
-                send(
-                    "HOOK",
-                    "WebSocket interceptado"
-                );
+                            return socket;
+                        };
+
+                    window.WebSocket.prototype =
+                        OriginalWebSocket.prototype;
+
+                    send(
+                        "HOOK",
+                        "WebSocket interceptado"
+                    );
+                }
 
             } catch (e) {
 
@@ -759,9 +891,7 @@ private fun injectAnalyzerJavascript(
             try {
 
                 var links =
-                    document.querySelectorAll(
-                        "a"
-                    );
+                    document.querySelectorAll("a");
 
                 send(
                     "DOM",
@@ -870,164 +1000,220 @@ private fun injectAnalyzerJavascript(
             );
 
         })();
-    """.trimIndent()
-
-    view.evaluateJavascript(
-        script,
-        null
-    )
-}
-
-/*
- * Este método NÃO acessa mais o WebView.
- * Recebe o User-Agent já capturado na UI thread.
- */
-private fun buildCompleteLog(
-    userAgent: String
-): String {
-
-    val builder =
-        StringBuilder()
-
-    builder.append(
-        "VALE DA HERANÇA - RELATÓRIO DE ANÁLISE\n"
-    )
-
-    builder.append(
-        "==============================================\n\n"
-    )
-
-    builder.append(
-        "Data da análise: "
-    )
-
-    builder.append(
-        SimpleDateFormat(
-            "yyyy-MM-dd HH:mm:ss",
-            Locale.US
-        ).format(Date())
-    )
-
-    builder.append(
-        "\n\n"
-    )
-
-    builder.append(
-        "URL inicial:\n"
-    )
-
-    builder.append(
-        gameUrl
-    )
-
-    builder.append(
-        "\n\n"
-    )
-
-    builder.append(
-        "Android:\n"
-    )
-
-    builder.append(
-        Build.VERSION.RELEASE
-    )
-
-    builder.append(
-        " (API "
-    )
-
-    builder.append(
-        Build.VERSION.SDK_INT
-    )
-
-    builder.append(
-        ")\n\n"
-    )
-
-    builder.append(
-        "Dispositivo:\n"
-    )
-
-    builder.append(
-        "${Build.MANUFACTURER} ${Build.MODEL}\n\n"
-    )
-
-    builder.append(
-        "USER AGENT:\n"
-    )
-
-    builder.append(
-        userAgent
-    )
-
-    builder.append(
-        "\n\n"
-    )
-
-    builder.append(
-        "==============================================\n"
-    )
-
-    builder.append(
-        "LOG DE EVENTOS\n"
-    )
-
-    builder.append(
-        "==============================================\n\n"
-    )
-
-    val logSnapshot =
-        logs.toList()
-
-    logSnapshot.forEach { log ->
-
-        builder.append(log)
-        builder.append("\n")
+        """.trimIndent()
     }
 
-    builder.append(
-        "\n==============================================\n"
-    )
-
-    builder.append(
-        "FIM DO RELATÓRIO\n"
-    )
-
-    builder.append(
-        "==============================================\n"
-    )
-
-    return builder.toString()
-}
-
-private fun saveLogToDownloads() {
+    // ============================================================
+    // RELATÓRIO
+    // ============================================================
 
     /*
-     * ESTA FUNÇÃO É CHAMADA PELA UI THREAD.
+     * IMPORTANTE:
      *
-     * O WebView é acessado somente aqui,
-     * antes de iniciar a thread de gravação.
-     */
-
-    val userAgent =
-        webViewInstance
-            ?.settings
-            ?.userAgentString
-            ?: "N/D"
-
-    /*
-     * Também fazemos o snapshot do relatório
-     * enquanto ainda estamos na UI thread.
+     * Esta função não acessa WebView.
      *
-     * Depois disso, a thread de gravação
-     * não toca mais no WebView nem na lista
-     * observável diretamente.
+     * Também recebe uma cópia dos logs.
      */
+    private fun buildCompleteLog(
+        userAgent: String,
+        logSnapshot: List<String>
+    ): String {
 
-    val reportContent =
-        buildCompleteLog(userAgent)
+        val builder =
+            StringBuilder()
 
-    Thread {
+        builder.append(
+            "VALE DA HERANÇA - RELATÓRIO DE ANÁLISE\n"
+        )
+
+        builder.append(
+            "==============================================\n\n"
+        )
+
+        builder.append(
+            "Data da análise: "
+        )
+
+        builder.append(
+            SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss",
+                Locale.US
+            ).format(Date())
+        )
+
+        builder.append(
+            "\n\n"
+        )
+
+        builder.append(
+            "URL inicial:\n"
+        )
+
+        builder.append(
+            gameUrl
+        )
+
+        builder.append(
+            "\n\n"
+        )
+
+        builder.append(
+            "Android:\n"
+        )
+
+        builder.append(
+            Build.VERSION.RELEASE
+        )
+
+        builder.append(
+            " (API "
+        )
+
+        builder.append(
+            Build.VERSION.SDK_INT
+        )
+
+        builder.append(
+            ")\n\n"
+        )
+
+        builder.append(
+            "Dispositivo:\n"
+        )
+
+        builder.append(
+            Build.MANUFACTURER
+        )
+
+        builder.append(
+            " "
+        )
+
+        builder.append(
+            Build.MODEL
+        )
+
+        builder.append(
+            "\n\n"
+        )
+
+        builder.append(
+            "USER AGENT:\n"
+        )
+
+        builder.append(
+            userAgent
+        )
+
+        builder.append(
+            "\n\n"
+        )
+
+        builder.append(
+            "==============================================\n"
+        )
+
+        builder.append(
+            "LOG DE EVENTOS\n"
+        )
+
+        builder.append(
+            "==============================================\n\n"
+        )
+
+        /*
+         * Agora logSnapshot é explicitamente List<String>.
+         *
+         * Não existe acesso ao MutableStateList nesta função.
+         */
+        for (log: String in logSnapshot) {
+
+            builder.append(log)
+
+            builder.append("\n")
+        }
+
+        builder.append(
+            "\n==============================================\n"
+        )
+
+        builder.append(
+            "FIM DO RELATÓRIO\n"
+        )
+
+        builder.append(
+            "==============================================\n"
+        )
+
+        return builder.toString()
+    }
+
+    // ============================================================
+    // SALVAR TXT
+    // ============================================================
+
+    private fun saveLogToDownloads() {
+
+        /*
+         * O botão chama esta função na UI thread.
+         *
+         * O WebView é acessado SOMENTE aqui.
+         */
+
+        runOnUiThread {
+
+            try {
+
+                val userAgent =
+                    webViewInstance
+                        ?.settings
+                        ?.userAgentString
+                        ?: "N/D"
+
+                /*
+                 * Fazemos uma cópia da lista enquanto estamos
+                 * na UI thread.
+                 */
+                val logSnapshot: List<String> =
+                    logs.toList()
+
+                /*
+                 * Criamos todo o conteúdo antes de iniciar
+                 * a thread de gravação.
+                 */
+                val reportContent =
+                    buildCompleteLog(
+                        userAgent = userAgent,
+                        logSnapshot = logSnapshot
+                    )
+
+                Thread {
+
+                    saveReportFile(
+                        reportContent
+                    )
+
+                }.start()
+
+            } catch (e: Exception) {
+
+                appendLog(
+                    "[SAVE ERROR] " +
+                        "${e.javaClass.simpleName}: ${e.message}"
+                )
+
+                Toast.makeText(
+                    this,
+                    "Erro ao preparar relatório",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun saveReportFile(
+        reportContent: String
+    ) {
 
         try {
 
@@ -1081,70 +1267,69 @@ private fun saveLogToDownloads() {
                 if (uri == null) {
 
                     throw Exception(
-                        "Não foi possível criar o arquivo em Downloads."
+                        "Não foi possível criar o arquivo."
                     )
                 }
 
-                resolver
-                    .openOutputStream(uri)
-                    .use { output ->
+                try {
 
-                        if (output == null) {
+                    resolver
+                        .openOutputStream(uri)
+                        .use { output ->
 
-                            throw Exception(
-                                "Não foi possível abrir o arquivo."
+                            if (output == null) {
+
+                                throw Exception(
+                                    "Não foi possível abrir o arquivo."
+                                )
+                            }
+
+                            output.write(
+                                reportContent.toByteArray(
+                                    Charsets.UTF_8
+                                )
+                            )
+
+                            output.flush()
+                        }
+
+                    val completed =
+                        ContentValues().apply {
+
+                            put(
+                                MediaStore.Downloads.IS_PENDING,
+                                0
                             )
                         }
 
-                        output.write(
-                            reportContent.toByteArray(
-                                Charsets.UTF_8
-                            )
-                        )
-                    }
-
-                val finishedValues =
-                    ContentValues().apply {
-
-                        put(
-                            MediaStore.Downloads.IS_PENDING,
-                            0
-                        )
-                    }
-
-                resolver.update(
-                    uri,
-                    finishedValues,
-                    null,
-                    null
-                )
-
-                runOnUiThread {
-
-                    lastSavedFileName =
-                        fileName
-
-                    appendLog(
-                        "[SAVE] Arquivo salvo em Downloads/$fileName"
+                    resolver.update(
+                        uri,
+                        completed,
+                        null,
+                        null
                     )
 
-                    Toast.makeText(
-                        this,
-                        "Relatório salvo em Downloads/$fileName",
-                        Toast.LENGTH_LONG
-                    ).show()
+                } catch (e: Exception) {
+
+                    resolver.delete(
+                        uri,
+                        null,
+                        null
+                    )
+
+                    throw e
                 }
 
             } else {
 
                 @Suppress("DEPRECATION")
                 val downloads =
-                    Environment
-                        .getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS
-                        )
+                    Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS
+                    )
 
                 if (!downloads.exists()) {
+
                     downloads.mkdirs()
                 }
 
@@ -1158,22 +1343,26 @@ private fun saveLogToDownloads() {
                     reportContent,
                     Charsets.UTF_8
                 )
+            }
 
-                runOnUiThread {
+            /*
+             * Somente agora, depois da gravação,
+             * voltamos para UI thread.
+             */
+            runOnUiThread {
 
-                    lastSavedFileName =
-                        fileName
+                lastSavedFileName =
+                    fileName
 
-                    appendLog(
-                        "[SAVE] Arquivo salvo em ${file.absolutePath}"
-                    )
+                appendLog(
+                    "[SAVE] Arquivo salvo: Downloads/$fileName"
+                )
 
-                    Toast.makeText(
-                        this,
-                        "Relatório salvo em Downloads",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                Toast.makeText(
+                    this,
+                    "Relatório salvo em Downloads",
+                    Toast.LENGTH_LONG
+                ).show()
             }
 
         } catch (e: Exception) {
@@ -1181,328 +1370,354 @@ private fun saveLogToDownloads() {
             runOnUiThread {
 
                 appendLog(
-                    "[SAVE ERROR] ${e.javaClass.simpleName}: ${e.message}"
+                    "[SAVE ERROR] " +
+                        "${e.javaClass.simpleName}: ${e.message}"
                 )
 
                 Toast.makeText(
                     this,
-                    "Erro ao salvar relatório: ${e.message}",
+                    "Erro ao salvar: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }
         }
+    }
 
-    }.start()
-}
+    // ============================================================
+    // COPIAR
+    // ============================================================
 
-private fun copyLogsToClipboard() {
+    private fun copyLogsToClipboard() {
 
-    /*
-     * Este método é chamado pelo botão da interface,
-     * portanto estamos na UI thread.
-     *
-     * Capturamos o User-Agent aqui, antes de gerar
-     * o relatório.
-     */
+        /*
+         * Botão da interface = UI thread.
+         *
+         * Portanto podemos obter o User-Agent do WebView aqui.
+         */
 
-    try {
+        runOnUiThread {
 
-        val userAgent =
-            webViewInstance
-                ?.settings
-                ?.userAgentString
-                ?: "N/D"
+            try {
 
-        val content =
-            buildCompleteLog(userAgent)
+                val userAgent =
+                    webViewInstance
+                        ?.settings
+                        ?.userAgentString
+                        ?: "N/D"
 
-        val clipboard =
-            getSystemService(
-                Context.CLIPBOARD_SERVICE
-            ) as ClipboardManager
+                val logSnapshot: List<String> =
+                    logs.toList()
 
-        clipboard.setPrimaryClip(
-            ClipData.newPlainText(
-                "Vale Herança Analyzer",
-                content
-            )
-        )
+                val content =
+                    buildCompleteLog(
+                        userAgent = userAgent,
+                        logSnapshot = logSnapshot
+                    )
 
-        appendLog(
-            "[UI] Relatório copiado para a área de transferência."
-        )
+                val clipboard =
+                    getSystemService(
+                        Context.CLIPBOARD_SERVICE
+                    ) as ClipboardManager
 
-        Toast.makeText(
-            this,
-            "Relatório copiado",
-            Toast.LENGTH_SHORT
-        ).show()
+                clipboard.setPrimaryClip(
+                    ClipData.newPlainText(
+                        "Vale Herança Analyzer",
+                        content
+                    )
+                )
 
-    } catch (e: Exception) {
+                appendLog(
+                    "[UI] Relatório copiado."
+                )
 
-        appendLog(
-            "[COPY ERROR] ${e.message}"
-        )
+                Toast.makeText(
+                    this,
+                    "Relatório copiado",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+            } catch (e: Exception) {
+
+                appendLog(
+                    "[COPY ERROR] ${e.message}"
+                )
+            }
+        }
+    }
+
+    // ============================================================
+    // LIFECYCLE
+    // ============================================================
+
+    override fun onResume() {
+
+        super.onResume()
+
+        /*
+         * onResume já ocorre na UI thread.
+         */
+        webViewInstance?.onResume()
+    }
+
+    override fun onPause() {
+
+        /*
+         * onPause já ocorre na UI thread.
+         */
+        webViewInstance?.onPause()
+
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+
+        /*
+         * onDestroy também ocorre na UI thread.
+         */
+
+        webViewInstance?.apply {
+
+            try {
+                stopLoading()
+            } catch (_) {
+            }
+
+            try {
+                removeAllViews()
+            } catch (_) {
+            }
+
+            try {
+                destroy()
+            } catch (_) {
+            }
+        }
+
+        webViewInstance = null
+
+        super.onDestroy()
     }
 }
 
-override fun onResume() {
-
-    super.onResume()
-
-    webViewInstance?.onResume()
-}
-
-override fun onPause() {
-
-    webViewInstance?.onPause()
-
-    super.onPause()
-}
-
-override fun onDestroy() {
-
-    webViewInstance?.apply {
-
-        stopLoading()
-
-        removeAllViews()
-
-        destroy()
-    }
-
-    webViewInstance = null
-
-    super.onDestroy()
-}
-
-
-
-}
-
+// ================================================================
+// CONTROL BAR
+// ================================================================
 
 @Composable
 fun ControlBar(
-showConsole: Boolean,
-onToggleConsole: () -> Unit,
-onReload: () -> Unit,
-onClearLogs: () -> Unit,
-onSaveLog: () -> Unit,
-onCopyLog: () -> Unit
+    showConsole: Boolean,
+    onToggleConsole: () -> Unit,
+    onReload: () -> Unit,
+    onClearLogs: () -> Unit,
+    onSaveLog: () -> Unit,
+    onCopyLog: () -> Unit
 ) {
 
+    Row(
 
-Row(
-
-    modifier = Modifier
-        .fillMaxWidth()
-        .background(
-            Color(0xFF1E1E1E)
-        )
-        .padding(
-            horizontal = 8.dp,
-            vertical = 4.dp
-        ),
-
-    horizontalArrangement =
-        Arrangement.spacedBy(6.dp),
-
-    verticalAlignment =
-        Alignment.CenterVertically
-) {
-
-    Button(
-
-        onClick = onReload,
-
-        colors =
-            ButtonDefaults.buttonColors(
-                containerColor =
-                    Color(0xFF333333)
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Color(0xFF1E1E1E)
             )
+            .padding(
+                horizontal = 8.dp,
+                vertical = 4.dp
+            ),
+
+        horizontalArrangement =
+            Arrangement.spacedBy(6.dp),
+
+        verticalAlignment =
+            Alignment.CenterVertically
     ) {
-
-        Text(
-            text = "Recarregar",
-            fontSize = 11.sp,
-            color = Color.White
-        )
-    }
-
-    Button(
-
-        onClick = onToggleConsole,
-
-        colors =
-            ButtonDefaults.buttonColors(
-                containerColor =
-                    if (showConsole)
-                        Color(0xFF007ACC)
-                    else
-                        Color(0xFF333333)
-            )
-    ) {
-
-        Text(
-            text =
-                if (showConsole)
-                    "Ocultar Log"
-                else
-                    "Ver Log",
-
-            fontSize = 11.sp,
-
-            color = Color.White
-        )
-    }
-
-    Button(
-
-        onClick = onSaveLog,
-
-        colors =
-            ButtonDefaults.buttonColors(
-                containerColor =
-                    Color(0xFF176B3A)
-            )
-    ) {
-
-        Text(
-            text = "SALVAR TXT",
-            fontSize = 11.sp,
-            color = Color.White
-        )
-    }
-
-    Button(
-
-        onClick = onCopyLog,
-
-        colors =
-            ButtonDefaults.buttonColors(
-                containerColor =
-                    Color(0xFF444444)
-            )
-    ) {
-
-        Text(
-            text = "COPIAR",
-            fontSize = 11.sp,
-            color = Color.White
-        )
-    }
-
-    if (showConsole) {
 
         Button(
 
-            onClick = onClearLogs,
+            onClick = onReload,
 
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor =
-                        Color(0xFF552222)
+                        Color(0xFF333333)
                 )
         ) {
 
             Text(
-                text = "LIMPAR",
+                text = "Recarregar",
                 fontSize = 11.sp,
                 color = Color.White
             )
         }
+
+        Button(
+
+            onClick = onToggleConsole,
+
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor =
+                        if (showConsole)
+                            Color(0xFF007ACC)
+                        else
+                            Color(0xFF333333)
+                )
+        ) {
+
+            Text(
+                text =
+                    if (showConsole)
+                        "Ocultar Log"
+                    else
+                        "Ver Log",
+
+                fontSize = 11.sp,
+
+                color = Color.White
+            )
+        }
+
+        Button(
+
+            onClick = onSaveLog,
+
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor =
+                        Color(0xFF176B3A)
+                )
+        ) {
+
+            Text(
+                text = "SALVAR TXT",
+                fontSize = 11.sp,
+                color = Color.White
+            )
+        }
+
+        Button(
+
+            onClick = onCopyLog,
+
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor =
+                        Color(0xFF444444)
+                )
+        ) {
+
+            Text(
+                text = "COPIAR",
+                fontSize = 11.sp,
+                color = Color.White
+            )
+        }
+
+        if (showConsole) {
+
+            Button(
+
+                onClick = onClearLogs,
+
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            Color(0xFF552222)
+                    )
+            ) {
+
+                Text(
+                    text = "LIMPAR",
+                    fontSize = 11.sp,
+                    color = Color.White
+                )
+            }
+        }
     }
 }
 
-
-
-}
-
+// ================================================================
+// CONSOLE
+// ================================================================
 
 @Composable
 fun ConsoleView(
-logs: List,
-modifier: Modifier = Modifier
+    logs: List<String>,
+    modifier: Modifier = Modifier
 ) {
 
+    val listState =
+        rememberLazyListState()
 
-val listState =
-    rememberLazyListState()
+    LaunchedEffect(
+        logs.size
+    ) {
 
-LaunchedEffect(
-    logs.size
-) {
+        if (logs.isNotEmpty()) {
 
-    if (logs.isNotEmpty()) {
+            listState.animateScrollToItem(
+                logs.size - 1
+            )
+        }
+    }
 
-        listState.animateScrollToItem(
-            logs.size - 1
-        )
+    LazyColumn(
+
+        state = listState,
+
+        modifier = modifier
+            .background(
+                Color(0xFF0D0D0D)
+            )
+            .padding(6.dp)
+    ) {
+
+        items(
+            items = logs
+        ) { log ->
+
+            Text(
+
+                text = log,
+
+                color =
+                    when {
+
+                        log.contains("[CONSOLE]") ->
+                            Color(0xFF4EC9B0)
+
+                        log.contains("[REQUEST]") ->
+                            Color(0xFF569CD6)
+
+                        log.contains("[FETCH]") ->
+                            Color(0xFFDCDCAA)
+
+                        log.contains("[XHR]") ->
+                            Color(0xFFCE9178)
+
+                        log.contains("[WEBSOCKET]") ->
+                            Color(0xFFC586C0)
+
+                        log.contains("[RESOURCE]") ->
+                            Color(0xFF9CDCFE)
+
+                        log.contains("[PAGE]") ->
+                            Color(0xFFCE9178)
+
+                        log.contains("[SAVE]") ->
+                            Color(0xFF6A9955)
+
+                        else ->
+                            Color(0xFFCCCCCC)
+                    },
+
+                fontSize = 10.sp,
+
+                fontFamily =
+                    FontFamily.Monospace,
+
+                lineHeight = 13.sp
+            )
+        }
     }
 }
-
-LazyColumn(
-
-    state = listState,
-
-    modifier = modifier
-        .background(
-            Color(0xFF0D0D0D)
-        )
-        .padding(6.dp)
-) {
-
-    items(
-        items = logs
-    ) { log ->
-
-        Text(
-
-            text = log,
-
-            color =
-                when {
-
-                    log.contains("[CONSOLE]") ->
-                        Color(0xFF4EC9B0)
-
-                    log.contains("[REQUEST]") ->
-                        Color(0xFF569CD6)
-
-                    log.contains("[FETCH]") ->
-                        Color(0xFFDCDCAA)
-
-                    log.contains("[XHR]") ->
-                        Color(0xFFCE9178)
-
-                    log.contains("[WEBSOCKET]") ->
-                        Color(0xFFC586C0)
-
-                    log.contains("[RESOURCE]") ->
-                        Color(0xFF9CDCFE)
-
-                    log.contains("[PAGE]") ->
-                        Color(0xFFCE9178)
-
-                    log.contains("[SAVE]") ->
-                        Color(0xFF6A9955)
-
-                    else ->
-                        Color(0xFFCCCCCC)
-                },
-
-            fontSize = 10.sp,
-
-            fontFamily =
-                FontFamily.Monospace,
-
-            lineHeight = 13.sp
-        )
-    }
-}
-
-
-
-}
-
-
