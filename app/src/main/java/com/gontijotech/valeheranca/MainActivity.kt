@@ -214,10 +214,3 @@ class MainActivity : Activity() {
 }
 
 
-
-Importante: o AndroidManifest.xml pode continuar como está. Não precisamos mais de nenhuma biblioteca de Compose para essa versão.
-
-
-Se quiser deixar o projeto realmente mínimo, o próximo passo é também limpar o app/build.gradle.kts, removendo Compose e deixando apenas as dependências necessárias para a WebView.
-
-
