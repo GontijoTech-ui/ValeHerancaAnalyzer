@@ -36,13 +36,52 @@ jobs:
       - name: Verify Gradle
         run: gradle --version
 
-      - name: Clean project
-        run: gradle clean
+      - name: Show Project Structure
+        run: |
+          echo "=============================="
+          echo "PROJECT FILES"
+          echo "=============================="
+          find . -maxdepth 6 -type f | sort
+
+      - name: Show Root Build
+        run: |
+          echo "=============================="
+          echo "ROOT build.gradle.kts"
+          echo "=============================="
+          cat build.gradle.kts
+
+      - name: Show App Build
+        run: |
+          echo "=============================="
+          echo "APP build.gradle.kts"
+          echo "=============================="
+          cat app/build.gradle.kts
+
+      - name: Show Settings
+        run: |
+          echo "=============================="
+          echo "settings.gradle.kts"
+          echo "=============================="
+          cat settings.gradle.kts
+
+      - name: Clean Project
+        run: |
+          gradle clean --stacktrace --info
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: |
+          gradle assembleDebug --stacktrace --info
+
+      - name: Check APK
+        if: success()
+        run: |
+          echo "=============================="
+          echo "APK GERADO:"
+          echo "=============================="
+          ls -lh app/build/outputs/apk/debug/
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v5
         with:
           name: ValeHerancaAnalyzer-debug
