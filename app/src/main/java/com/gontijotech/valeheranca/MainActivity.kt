@@ -1,4 +1,5 @@
-package com.gontijotech.valeheranca
+package com.valeherancaanalyzer
+
 
 import android.annotation.SuppressLint
 import android.content.ContentValues
