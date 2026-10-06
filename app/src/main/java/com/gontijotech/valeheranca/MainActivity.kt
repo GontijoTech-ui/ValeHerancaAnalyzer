@@ -1,5 +1,6 @@
 package com.gontijotech.valeheranca
 
+
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -7,7 +8,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -60,1022 +60,1034 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+
 class AnalyzerBridge(
-    private val onLog: (String) -> Unit
+private val onLog: (String) -> Unit
 ) {
 
-    @JavascriptInterface
-    fun log(message: String) {
-        onLog("[JS] $message")
-    }
 
-    @JavascriptInterface
-    fun sendData(data: String) {
-        onLog("[DATA] $data")
-    }
+@JavascriptInterface
+fun log(message: String) {
+    onLog("[JS] $message")
 }
+
+@JavascriptInterface
+fun sendData(data: String) {
+    onLog("[DATA] $data")
+}
+
+
+
+}
+
 
 class MainActivity : ComponentActivity() {
 
-    private val logs = mutableStateListOf<String>()
 
-    private var webViewInstance: WebView? = null
+private val logs = mutableStateListOf<String>()
 
-    private var lastSavedFileName: String? = null
+private var webViewInstance: WebView? = null
 
-    private val gameUrl =
-        "https://www.astrocade.com/games/vale-da-heran%C3%A7a-renova%C3%A7%C3%A3o/01M46K2HXGZ4F46MRCKS6WTQ6Y"
+private var lastSavedFileName: String? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+private val gameUrl =
+    "https://www.astrocade.com/games/vale-da-heran%C3%A7a-renova%C3%A7%C3%A3o/01M46K2HXGZ4F46MRCKS6WTQ6Y"
 
-        appendLog("==============================================")
-        appendLog("VALE HERANÇA ANALYZER")
-        appendLog("Inicializando analisador...")
-        appendLog("URL: $gameUrl")
-        appendLog("==============================================")
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
 
-        setContent {
+    appendLog("==============================================")
+    appendLog("VALE HERANÇA ANALYZER")
+    appendLog("Inicializando analisador...")
+    appendLog("URL: $gameUrl")
+    appendLog("==============================================")
 
-            MaterialTheme {
+    setContent {
 
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color.Black
+        MaterialTheme {
+
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = Color.Black
+            ) {
+
+                var showConsole by remember {
+                    mutableStateOf(false)
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxSize()
                 ) {
 
-                    var showConsole by remember {
-                        mutableStateOf(false)
-                    }
+                    ControlBar(
+                        showConsole = showConsole,
 
-                    Column(
-                        modifier = Modifier.fillMaxSize()
+                        onToggleConsole = {
+                            showConsole = !showConsole
+                        },
+
+                        onReload = {
+                            appendLog("[UI] Recarregando WebView...")
+                            webViewInstance?.reload()
+                        },
+
+                        onClearLogs = {
+                            logs.clear()
+                            appendLog("[UI] Log limpo.")
+                        },
+
+                        onSaveLog = {
+                            saveLogToDownloads()
+                        },
+
+                        onCopyLog = {
+                            copyLogsToClipboard()
+                        }
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     ) {
 
-                        ControlBar(
-                            showConsole = showConsole,
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
 
-                            onToggleConsole = {
-                                showConsole = !showConsole
-                            },
+                            factory = { context ->
 
-                            onReload = {
-                                appendLog("[UI] Recarregando WebView...")
-                                webViewInstance?.reload()
-                            },
+                                WebView(context).apply {
 
-                            onClearLogs = {
-                                logs.clear()
-                                appendLog("[UI] Log limpo.")
-                            },
+                                    layoutParams =
+                                        ViewGroup.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
 
-                            onSaveLog = {
-                                saveLogToDownloads()
-                            },
+                                    setBackgroundColor(
+                                        AndroidColor.BLACK
+                                    )
 
-                            onCopyLog = {
-                                copyLogsToClipboard()
+                                    configureWebView(this)
+
+                                    addJavascriptInterface(
+                                        AnalyzerBridge {
+                                            appendLog(it)
+                                        },
+                                        "AnalyzerBridge"
+                                    )
+
+                                    appendLog(
+                                        "[WEBVIEW] Carregando página do jogo..."
+                                    )
+
+                                    webViewInstance = this
+
+                                    loadUrl(gameUrl)
+                                }
                             }
                         )
+                    }
 
-                        Box(
+                    if (showConsole) {
+
+                        ConsoleView(
+                            logs = logs,
                             modifier = Modifier
-                                .weight(1f)
                                 .fillMaxWidth()
-                        ) {
-
-                            AndroidView(
-
-                                modifier = Modifier.fillMaxSize(),
-
-                                factory = { context ->
-
-                                    WebView(context).apply {
-
-                                        layoutParams =
-                                            ViewGroup.LayoutParams(
-                                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                                ViewGroup.LayoutParams.MATCH_PARENT
-                                            )
-
-                                        setBackgroundColor(
-                                            AndroidColor.BLACK
-                                        )
-
-                                        configureWebView(this)
-
-                                        addJavascriptInterface(
-                                            AnalyzerBridge {
-                                                appendLog(it)
-                                            },
-                                            "AnalyzerBridge"
-                                        )
-
-                                        appendLog(
-                                            "[WEBVIEW] Carregando página do jogo..."
-                                        )
-
-                                        loadUrl(gameUrl)
-
-                                        webViewInstance = this
-                                    }
-                                }
-                            )
-                        }
-
-                        if (showConsole) {
-
-                            ConsoleView(
-                                logs = logs,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(260.dp)
-                            )
-                        }
+                                .height(260.dp)
+                        )
                     }
                 }
             }
         }
     }
+}
 
-    fun appendLog(message: String) {
+fun appendLog(message: String) {
 
-        runOnUiThread {
+    runOnUiThread {
 
-            val time = SimpleDateFormat(
-                "HH:mm:ss.SSS",
-                Locale.US
-            ).format(Date())
+        val time = SimpleDateFormat(
+            "HH:mm:ss.SSS",
+            Locale.US
+        ).format(Date())
 
-            logs.add(
-                "[$time] $message"
+        logs.add(
+            "[$time] $message"
+        )
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+private fun configureWebView(wv: WebView) {
+
+    wv.settings.apply {
+
+        javaScriptEnabled = true
+
+        domStorageEnabled = true
+
+        databaseEnabled = true
+
+        allowFileAccess = true
+
+        allowContentAccess = true
+
+        useWideViewPort = true
+
+        loadWithOverviewMode = false
+
+        mediaPlaybackRequiresUserGesture = false
+
+        javaScriptCanOpenWindowsAutomatically = true
+
+        setSupportMultipleWindows(true)
+
+        cacheMode = WebSettings.LOAD_DEFAULT
+
+        userAgentString =
+            "$userAgentString ValeHerancaAnalyzer/1.0"
+    }
+
+    appendLog(
+        "[WEBVIEW] JavaScript habilitado."
+    )
+
+    appendLog(
+        "[WEBVIEW] DOM Storage habilitado."
+    )
+
+    wv.webViewClient = object : WebViewClient() {
+
+        override fun onPageStarted(
+            view: WebView?,
+            url: String?,
+            favicon: Bitmap?
+        ) {
+
+            appendLog(
+                "[PAGE START] $url"
+            )
+
+            injectAnalyzerJavascript(view)
+        }
+
+        override fun onPageFinished(
+            view: WebView?,
+            url: String?
+        ) {
+
+            appendLog(
+                "[PAGE FINISHED] $url"
+            )
+
+            appendLog(
+                "[PAGE] Injetando analisador JavaScript..."
+            )
+
+            injectAnalyzerJavascript(view)
+        }
+
+        override fun shouldInterceptRequest(
+            view: WebView?,
+            request: WebResourceRequest?
+        ): WebResourceResponse? {
+
+            if (request != null) {
+
+                val url =
+                    request.url.toString()
+
+                val method =
+                    request.method
+
+                val headers =
+                    request.requestHeaders
+
+                appendLog(
+                    "[REQUEST] $method $url"
+                )
+
+                if (headers.isNotEmpty()) {
+
+                    appendLog(
+                        "[REQUEST HEADERS] ${headers.entries.joinToString()}"
+                    )
+                }
+            }
+
+            return super.shouldInterceptRequest(
+                view,
+                request
+            )
+        }
+
+        @Suppress("DEPRECATION")
+        override fun shouldInterceptRequest(
+            view: WebView?,
+            url: String?
+        ): WebResourceResponse? {
+
+            if (!url.isNullOrBlank()) {
+
+                appendLog(
+                    "[REQUEST-LEGACY] $url"
+                )
+            }
+
+            return super.shouldInterceptRequest(
+                view,
+                url
+            )
+        }
+
+        override fun doUpdateVisitedHistory(
+            view: WebView?,
+            url: String?,
+            isReload: Boolean
+        ) {
+
+            appendLog(
+                "[HISTORY] url=$url reload=$isReload"
+            )
+
+            super.doUpdateVisitedHistory(
+                view,
+                url,
+                isReload
+            )
+        }
+
+        override fun onPageCommitVisible(
+            view: WebView?,
+            url: String?
+        ) {
+
+            appendLog(
+                "[PAGE VISIBLE] $url"
+            )
+
+            super.onPageCommitVisible(
+                view,
+                url
             )
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun configureWebView(wv: WebView) {
+    wv.webChromeClient =
+        object : WebChromeClient() {
 
-        wv.settings.apply {
+            override fun onConsoleMessage(
+                consoleMessage: ConsoleMessage?
+            ): Boolean {
 
-            javaScriptEnabled = true
-
-            domStorageEnabled = true
-
-            databaseEnabled = true
-
-            allowFileAccess = true
-
-            allowContentAccess = true
-
-            useWideViewPort = true
-
-            loadWithOverviewMode = false
-
-            mediaPlaybackRequiresUserGesture = false
-
-            javaScriptCanOpenWindowsAutomatically = true
-
-            setSupportMultipleWindows(true)
-
-            cacheMode = WebSettings.LOAD_DEFAULT
-
-            userAgentString =
-                "$userAgentString ValeHerancaAnalyzer/1.0"
-        }
-
-        appendLog(
-            "[WEBVIEW] JavaScript habilitado."
-        )
-
-        appendLog(
-            "[WEBVIEW] DOM Storage habilitado."
-        )
-
-        /*
-         * IMPORTANTE:
-         *
-         * Não usamos:
-         *
-         *     wv.webViewClient = null
-         *
-         * porque a API Kotlin atual considera WebViewClient
-         * como um tipo não anulável.
-         *
-         * Instalamos diretamente o WebViewClient completo.
-         */
-        wv.webViewClient = object : WebViewClient() {
-
-            override fun onPageStarted(
-                view: WebView?,
-                url: String?,
-                favicon: Bitmap?
-            ) {
-
-                appendLog(
-                    "[PAGE START] $url"
-                )
-
-                injectAnalyzerJavascript(view)
-            }
-
-            override fun onPageFinished(
-                view: WebView?,
-                url: String?
-            ) {
-
-                appendLog(
-                    "[PAGE FINISHED] $url"
-                )
-
-                appendLog(
-                    "[PAGE] Injetando analisador JavaScript..."
-                )
-
-                injectAnalyzerJavascript(view)
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): WebResourceResponse? {
-
-                if (request != null) {
-
-                    val url =
-                        request.url.toString()
-
-                    val method =
-                        request.method
-
-                    val headers =
-                        request.requestHeaders
+                consoleMessage?.let {
 
                     appendLog(
-                        "[REQUEST] $method $url"
-                    )
-
-                    if (headers.isNotEmpty()) {
-
-                        appendLog(
-                            "[REQUEST HEADERS] ${headers.entries.joinToString()}"
-                        )
-                    }
-                }
-
-                return super.shouldInterceptRequest(
-                    view,
-                    request
-                )
-            }
-
-            @Suppress("DEPRECATION")
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                url: String?
-            ): WebResourceResponse? {
-
-                if (!url.isNullOrBlank()) {
-
-                    appendLog(
-                        "[REQUEST-LEGACY] $url"
+                        "[CONSOLE] ${it.message()} (${it.sourceId()}:${it.lineNumber()})"
                     )
                 }
 
-                return super.shouldInterceptRequest(
-                    view,
-                    url
-                )
+                return true
             }
 
-            override fun doUpdateVisitedHistory(
+            override fun onProgressChanged(
                 view: WebView?,
-                url: String?,
-                isReload: Boolean
+                newProgress: Int
             ) {
 
-                appendLog(
-                    "[HISTORY] url=$url reload=$isReload"
-                )
-
-                super.doUpdateVisitedHistory(
-                    view,
-                    url,
-                    isReload
-                )
-            }
-
-            override fun onPageCommitVisible(
-                view: WebView?,
-                url: String?
-            ) {
-
-                appendLog(
-                    "[PAGE VISIBLE] $url"
-                )
-
-                super.onPageCommitVisible(
-                    view,
-                    url
-                )
-            }
-        }
-
-        wv.webChromeClient =
-            object : WebChromeClient() {
-
-                override fun onConsoleMessage(
-                    consoleMessage: ConsoleMessage?
-                ): Boolean {
-
-                    consoleMessage?.let {
-
-                        val message =
-                            it.message()
-
-                        val source =
-                            it.sourceId()
-
-                        val line =
-                            it.lineNumber()
-
-                        appendLog(
-                            "[CONSOLE] $message ($source:$line)"
-                        )
-                    }
-
-                    return true
-                }
-
-                override fun onProgressChanged(
-                    view: WebView?,
-                    newProgress: Int
+                if (
+                    newProgress == 10 ||
+                    newProgress == 25 ||
+                    newProgress == 50 ||
+                    newProgress == 75 ||
+                    newProgress == 90 ||
+                    newProgress == 100
                 ) {
+
+                    appendLog(
+                        "[PROGRESS] $newProgress%"
+                    )
+                }
+
+                super.onProgressChanged(
+                    view,
+                    newProgress
+                )
+            }
+        }
+}
+
+private fun injectAnalyzerJavascript(
+    view: WebView?
+) {
+
+    if (view == null) {
+        return
+    }
+
+    val script = """
+        (function() {
+
+            if (window.__VALE_HERANCA_ANALYZER__) {
+                console.log("ValeHerancaAnalyzer já instalado.");
+                return;
+            }
+
+            window.__VALE_HERANCA_ANALYZER__ = true;
+
+            function safeString(value) {
+                try {
+                    if (typeof value === "string") {
+                        return value;
+                    }
+
+                    if (value === undefined) {
+                        return "undefined";
+                    }
+
+                    if (value === null) {
+                        return "null";
+                    }
+
+                    return JSON.stringify(value);
+                } catch (e) {
+                    return String(value);
+                }
+            }
+
+            function send(type, data) {
+
+                try {
 
                     if (
-                        newProgress == 10 ||
-                        newProgress == 25 ||
-                        newProgress == 50 ||
-                        newProgress == 75 ||
-                        newProgress == 90 ||
-                        newProgress == 100
+                        window.AnalyzerBridge &&
+                        window.AnalyzerBridge.log
                     ) {
 
-                        appendLog(
-                            "[PROGRESS] $newProgress%"
-                        )
+                        window.AnalyzerBridge.log(
+                            "[" + type + "] " + data
+                        );
                     }
 
-                    super.onProgressChanged(
-                        view,
-                        newProgress
-                    )
+                } catch (e) {
+
+                    console.log(
+                        "Bridge error: " + e
+                    );
                 }
             }
-    }
 
-    private fun injectAnalyzerJavascript(
-        view: WebView?
-    ) {
-
-        if (view == null) {
-            return
-        }
-
-        val script = """
-            (function() {
-
-                if (window.__VALE_HERANCA_ANALYZER__) {
-                    console.log("ValeHerancaAnalyzer já instalado.");
-                    return;
-                }
-
-                window.__VALE_HERANCA_ANALYZER__ = true;
-
-                function safeString(value) {
-                    try {
-                        if (typeof value === "string") {
-                            return value;
-                        }
-
-                        if (value === undefined) {
-                            return "undefined";
-                        }
-
-                        if (value === null) {
-                            return "null";
-                        }
-
-                        return JSON.stringify(value);
-                    } catch (e) {
-                        return String(value);
-                    }
-                }
-
-                function send(type, data) {
-
-                    try {
-
-                        if (
-                            window.AnalyzerBridge &&
-                            window.AnalyzerBridge.log
-                        ) {
-
-                            window.AnalyzerBridge.log(
-                                "[" + type + "] " + data
-                            );
-                        }
-
-                    } catch (e) {
-                        console.log(
-                            "Bridge error: " + e
-                        );
-                    }
-                }
-
-                send(
-                    "JS",
-                    "Analyzer instalado em " +
-                    window.location.href
-                );
-
-                send(
-                    "TITLE",
-                    document.title
-                );
-
-                send(
-                    "UA",
-                    navigator.userAgent
-                );
-
-                /*
-                 * FETCH
-                 */
-
-                try {
-
-                    var originalFetch =
-                        window.fetch;
-
-                    window.fetch =
-                        function() {
-
-                            var args =
-                                Array.prototype.slice.call(
-                                    arguments
-                                );
-
-                            var input =
-                                args[0];
-
-                            var url =
-                                typeof input === "string"
-                                    ? input
-                                    : (
-                                        input &&
-                                        input.url
-                                        ? input.url
-                                        : String(input)
-                                    );
-
-                            send(
-                                "FETCH",
-                                "REQUEST " + url
-                            );
-
-                            return originalFetch
-                                .apply(this, arguments)
-                                .then(function(response) {
-
-                                    send(
-                                        "FETCH",
-                                        "RESPONSE " +
-                                        response.status +
-                                        " " +
-                                        response.url
-                                    );
-
-                                    return response;
-
-                                })
-                                .catch(function(error) {
-
-                                    send(
-                                        "FETCH",
-                                        "ERROR " +
-                                        safeString(error)
-                                    );
-
-                                    throw error;
-                                });
-                        };
-
-                    send(
-                        "HOOK",
-                        "fetch interceptado"
-                    );
-
-                } catch (e) {
-
-                    send(
-                        "HOOK ERROR",
-                        "fetch: " + e
-                    );
-                }
-
-                /*
-                 * XMLHttpRequest
-                 */
-
-                try {
-
-                    var originalOpen =
-                        XMLHttpRequest.prototype.open;
-
-                    var originalSend =
-                        XMLHttpRequest.prototype.send;
-
-                    XMLHttpRequest.prototype.open =
-                        function(
-                            method,
-                            url
-                        ) {
-
-                            this.__vh_method =
-                                method;
-
-                            this.__vh_url =
-                                url;
-
-                            send(
-                                "XHR",
-                                "OPEN " +
-                                method +
-                                " " +
-                                url
-                            );
-
-                            return originalOpen.apply(
-                                this,
-                                arguments
-                            );
-                        };
-
-                    XMLHttpRequest.prototype.send =
-                        function(body) {
-
-                            send(
-                                "XHR",
-                                "SEND " +
-                                (this.__vh_method || "") +
-                                " " +
-                                (this.__vh_url || "")
-                            );
-
-                            if (body) {
-
-                                send(
-                                    "XHR BODY",
-                                    safeString(body)
-                                );
-                            }
-
-                            return originalSend.apply(
-                                this,
-                                arguments
-                            );
-                        };
-
-                    send(
-                        "HOOK",
-                        "XMLHttpRequest interceptado"
-                    );
-
-                } catch (e) {
-
-                    send(
-                        "HOOK ERROR",
-                        "XHR: " + e
-                    );
-                }
-
-                /*
-                 * WEBSOCKET
-                 */
-
-                try {
-
-                    var OriginalWebSocket =
-                        window.WebSocket;
-
-                    window.WebSocket =
-                        function(url, protocols) {
-
-                            send(
-                                "WEBSOCKET",
-                                "CONNECT " +
-                                url
-                            );
-
-                            var socket;
-
-                            if (protocols !== undefined) {
-
-                                socket =
-                                    new OriginalWebSocket(
-                                        url,
-                                        protocols
-                                    );
-
-                            } else {
-
-                                socket =
-                                    new OriginalWebSocket(
-                                        url
-                                    );
-                            }
-
-                            socket.addEventListener(
-                                "open",
-                                function() {
-
-                                    send(
-                                        "WEBSOCKET",
-                                        "OPEN " +
-                                        url
-                                    );
-                                }
-                            );
-
-                            socket.addEventListener(
-                                "message",
-                                function(event) {
-
-                                    send(
-                                        "WEBSOCKET MESSAGE",
-                                        safeString(
-                                            event.data
-                                        )
-                                    );
-                                }
-                            );
-
-                            socket.addEventListener(
-                                "close",
-                                function(event) {
-
-                                    send(
-                                        "WEBSOCKET",
-                                        "CLOSE " +
-                                        url +
-                                        " code=" +
-                                        event.code
-                                    );
-                                }
-                            );
-
-                            socket.addEventListener(
-                                "error",
-                                function() {
-
-                                    send(
-                                        "WEBSOCKET",
-                                        "ERROR " +
-                                        url
-                                    );
-                                }
-                            );
-
-                            return socket;
-                        };
-
-                    window.WebSocket.prototype =
-                        OriginalWebSocket.prototype;
-
-                    send(
-                        "HOOK",
-                        "WebSocket interceptado"
-                    );
-
-                } catch (e) {
-
-                    send(
-                        "HOOK ERROR",
-                        "WebSocket: " + e
-                    );
-                }
-
-                /*
-                 * DOCUMENT / DOM
-                 */
-
-                try {
-
-                    var links =
-                        document.querySelectorAll(
-                            "a"
-                        );
-
-                    send(
-                        "DOM",
-                        "Links encontrados: " +
-                        links.length
-                    );
-
-                    for (
-                        var i = 0;
-                        i < Math.min(
-                            links.length,
-                            100
-                        );
-                        i++
-                    ) {
-
-                        var href =
-                            links[i].href;
-
-                        if (href) {
-
-                            send(
-                                "LINK",
-                                href
-                            );
-                        }
-                    }
-
-                } catch (e) {
-
-                    send(
-                        "DOM ERROR",
-                        String(e)
-                    );
-                }
-
-                /*
-                 * RESOURCES
-                 */
-
-                try {
-
-                    var resources =
-                        performance.getEntriesByType(
-                            "resource"
-                        );
-
-                    send(
-                        "RESOURCES",
-                        "Recursos carregados: " +
-                        resources.length
-                    );
-
-                    for (
-                        var r = 0;
-                        r < resources.length;
-                        r++
-                    ) {
-
-                        if (
-                            resources[r] &&
-                            resources[r].name
-                        ) {
-
-                            send(
-                                "RESOURCE",
-                                resources[r].name
-                            );
-                        }
-                    }
-
-                } catch (e) {
-
-                    send(
-                        "RESOURCE ERROR",
-                        String(e)
-                    );
-                }
-
-                /*
-                 * PAGE INFO
-                 */
-
-                try {
-
-                    send(
-                        "PAGE INFO",
-                        "URL=" +
-                        window.location.href +
-                        " | TITLE=" +
-                        document.title +
-                        " | ORIGIN=" +
-                        window.location.origin
-                    );
-
-                } catch (e) {
-
-                    send(
-                        "PAGE INFO ERROR",
-                        String(e)
-                    );
-                }
-
-                console.log(
-                    "ValeHerancaAnalyzer instalado."
-                );
-
-            })();
-        """.trimIndent()
-
-        view.evaluateJavascript(
-            script,
-            null
-        )
-    }
-
-    private fun getCompleteLog(): String {
-
-        val builder =
-            StringBuilder()
-
-        builder.append(
-            "VALE DA HERANÇA - RELATÓRIO DE ANÁLISE\n"
-        )
-
-        builder.append(
-            "==============================================\n\n"
-        )
-
-        builder.append(
-            "Data da análise: "
-        )
-
-        builder.append(
-            SimpleDateFormat(
-                "yyyy-MM-dd HH:mm:ss",
-                Locale.US
-            ).format(Date())
-        )
-
-        builder.append(
-            "\n\n"
-        )
-
-        builder.append(
-            "URL inicial:\n"
-        )
-
-        builder.append(
-            gameUrl
-        )
-
-        builder.append(
-            "\n\n"
-        )
-
-        builder.append(
-            "Android:\n"
-        )
-
-        builder.append(
-            Build.VERSION.RELEASE
-        )
-
-        builder.append(
-            " (API "
-        )
-
-        builder.append(
-            Build.VERSION.SDK_INT
-        )
-
-        builder.append(
-            ")\n\n"
-        )
-
-        builder.append(
-            "Dispositivo:\n"
-        )
-
-        builder.append(
-            "${Build.MANUFACTURER} ${Build.MODEL}\n\n"
-        )
-
-        builder.append(
-            "USER AGENT:\n"
-        )
-
-        builder.append(
-            webViewInstance
-                ?.settings
-                ?.userAgentString
-                ?: "N/D"
-        )
-
-        builder.append(
-            "\n\n"
-        )
-
-        builder.append(
-            "==============================================\n"
-        )
-
-        builder.append(
-            "LOG DE EVENTOS\n"
-        )
-
-        builder.append(
-            "==============================================\n\n"
-        )
-
-        logs.forEach { log ->
-
-            builder.append(
-                log
-            )
-
-            builder.append(
-                "\n"
-            )
-        }
-
-        builder.append(
-            "\n==============================================\n"
-        )
-
-        builder.append(
-            "FIM DO RELATÓRIO\n"
-        )
-
-        builder.append(
-            "==============================================\n"
-        )
-
-        return builder.toString()
-    }
-
-    private fun saveLogToDownloads() {
-
-        Thread {
+            send(
+                "JS",
+                "Analyzer instalado em " +
+                window.location.href
+            );
+
+            send(
+                "TITLE",
+                document.title
+            );
+
+            send(
+                "UA",
+                navigator.userAgent
+            );
+
+            /*
+             * FETCH
+             */
 
             try {
 
-                val content =
-                    getCompleteLog()
+                var originalFetch =
+                    window.fetch;
 
-                val timestamp =
-                    SimpleDateFormat(
-                        "yyyyMMdd_HHmmss",
-                        Locale.US
-                    ).format(Date())
+                window.fetch =
+                    function() {
 
-                val fileName =
-                    "vale_heranca_analise_$timestamp.txt"
+                        var args =
+                            Array.prototype.slice.call(
+                                arguments
+                            );
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        var input =
+                            args[0];
 
-                    val resolver =
-                        contentResolver
+                        var url =
+                            typeof input === "string"
+                                ? input
+                                : (
+                                    input &&
+                                    input.url
+                                    ? input.url
+                                    : String(input)
+                                );
 
-                    val values =
-                        ContentValues().apply {
+                        send(
+                            "FETCH",
+                            "REQUEST " + url
+                        );
 
-                            put(
-                                MediaStore.Downloads.DISPLAY_NAME,
-                                fileName
-                            )
+                        return originalFetch
+                            .apply(this, arguments)
+                            .then(function(response) {
 
-                            put(
-                                MediaStore.Downloads.MIME_TYPE,
-                                "text/plain"
-                            )
+                                send(
+                                    "FETCH",
+                                    "RESPONSE " +
+                                    response.status +
+                                    " " +
+                                    response.url
+                                );
 
-                            put(
-                                MediaStore.Downloads.RELATIVE_PATH,
-                                Environment.DIRECTORY_DOWNLOADS
-                            )
+                                return response;
 
-                            put(
-                                MediaStore.Downloads.IS_PENDING,
-                                1
-                            )
+                            })
+                            .catch(function(error) {
+
+                                send(
+                                    "FETCH",
+                                    "ERROR " +
+                                    safeString(error)
+                                );
+
+                                throw error;
+                            });
+                    };
+
+                send(
+                    "HOOK",
+                    "fetch interceptado"
+                );
+
+            } catch (e) {
+
+                send(
+                    "HOOK ERROR",
+                    "fetch: " + e
+                );
+            }
+
+            /*
+             * XMLHttpRequest
+             */
+
+            try {
+
+                var originalOpen =
+                    XMLHttpRequest.prototype.open;
+
+                var originalSend =
+                    XMLHttpRequest.prototype.send;
+
+                XMLHttpRequest.prototype.open =
+                    function(
+                        method,
+                        url
+                    ) {
+
+                        this.__vh_method =
+                            method;
+
+                        this.__vh_url =
+                            url;
+
+                        send(
+                            "XHR",
+                            "OPEN " +
+                            method +
+                            " " +
+                            url
+                        );
+
+                        return originalOpen.apply(
+                            this,
+                            arguments
+                        );
+                    };
+
+                XMLHttpRequest.prototype.send =
+                    function(body) {
+
+                        send(
+                            "XHR",
+                            "SEND " +
+                            (this.__vh_method || "") +
+                            " " +
+                            (this.__vh_url || "")
+                        );
+
+                        if (body) {
+
+                            send(
+                                "XHR BODY",
+                                safeString(body)
+                            );
                         }
 
-                    val uri =
-                        resolver.insert(
-                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            values
+                        return originalSend.apply(
+                            this,
+                            arguments
+                        );
+                    };
+
+                send(
+                    "HOOK",
+                    "XMLHttpRequest interceptado"
+                );
+
+            } catch (e) {
+
+                send(
+                    "HOOK ERROR",
+                    "XHR: " + e
+                );
+            }
+
+            /*
+             * WEBSOCKET
+             */
+
+            try {
+
+                var OriginalWebSocket =
+                    window.WebSocket;
+
+                window.WebSocket =
+                    function(url, protocols) {
+
+                        send(
+                            "WEBSOCKET",
+                            "CONNECT " +
+                            url
+                        );
+
+                        var socket;
+
+                        if (protocols !== undefined) {
+
+                            socket =
+                                new OriginalWebSocket(
+                                    url,
+                                    protocols
+                                );
+
+                        } else {
+
+                            socket =
+                                new OriginalWebSocket(
+                                    url
+                                );
+                        }
+
+                        socket.addEventListener(
+                            "open",
+                            function() {
+
+                                send(
+                                    "WEBSOCKET",
+                                    "OPEN " +
+                                    url
+                                );
+                            }
+                        );
+
+                        socket.addEventListener(
+                            "message",
+                            function(event) {
+
+                                send(
+                                    "WEBSOCKET MESSAGE",
+                                    safeString(
+                                        event.data
+                                    )
+                                );
+                            }
+                        );
+
+                        socket.addEventListener(
+                            "close",
+                            function(event) {
+
+                                send(
+                                    "WEBSOCKET",
+                                    "CLOSE " +
+                                    url +
+                                    " code=" +
+                                    event.code
+                                );
+                            }
+                        );
+
+                        socket.addEventListener(
+                            "error",
+                            function() {
+
+                                send(
+                                    "WEBSOCKET",
+                                    "ERROR " +
+                                    url
+                                );
+                            }
+                        );
+
+                        return socket;
+                    };
+
+                window.WebSocket.prototype =
+                    OriginalWebSocket.prototype;
+
+                send(
+                    "HOOK",
+                    "WebSocket interceptado"
+                );
+
+            } catch (e) {
+
+                send(
+                    "HOOK ERROR",
+                    "WebSocket: " + e
+                );
+            }
+
+            /*
+             * DOM
+             */
+
+            try {
+
+                var links =
+                    document.querySelectorAll(
+                        "a"
+                    );
+
+                send(
+                    "DOM",
+                    "Links encontrados: " +
+                    links.length
+                );
+
+                for (
+                    var i = 0;
+                    i < Math.min(
+                        links.length,
+                        100
+                    );
+                    i++
+                ) {
+
+                    var href =
+                        links[i].href;
+
+                    if (href) {
+
+                        send(
+                            "LINK",
+                            href
+                        );
+                    }
+                }
+
+            } catch (e) {
+
+                send(
+                    "DOM ERROR",
+                    String(e)
+                );
+            }
+
+            /*
+             * RESOURCES
+             */
+
+            try {
+
+                var resources =
+                    performance.getEntriesByType(
+                        "resource"
+                    );
+
+                send(
+                    "RESOURCES",
+                    "Recursos carregados: " +
+                    resources.length
+                );
+
+                for (
+                    var r = 0;
+                    r < resources.length;
+                    r++
+                ) {
+
+                    if (
+                        resources[r] &&
+                        resources[r].name
+                    ) {
+
+                        send(
+                            "RESOURCE",
+                            resources[r].name
+                        );
+                    }
+                }
+
+            } catch (e) {
+
+                send(
+                    "RESOURCE ERROR",
+                    String(e)
+                );
+            }
+
+            /*
+             * PAGE INFO
+             */
+
+            try {
+
+                send(
+                    "PAGE INFO",
+                    "URL=" +
+                    window.location.href +
+                    " | TITLE=" +
+                    document.title +
+                    " | ORIGIN=" +
+                    window.location.origin
+                );
+
+            } catch (e) {
+
+                send(
+                    "PAGE INFO ERROR",
+                    String(e)
+                );
+            }
+
+            console.log(
+                "ValeHerancaAnalyzer instalado."
+            );
+
+        })();
+    """.trimIndent()
+
+    view.evaluateJavascript(
+        script,
+        null
+    )
+}
+
+/*
+ * Este método NÃO acessa mais o WebView.
+ * Recebe o User-Agent já capturado na UI thread.
+ */
+private fun buildCompleteLog(
+    userAgent: String
+): String {
+
+    val builder =
+        StringBuilder()
+
+    builder.append(
+        "VALE DA HERANÇA - RELATÓRIO DE ANÁLISE\n"
+    )
+
+    builder.append(
+        "==============================================\n\n"
+    )
+
+    builder.append(
+        "Data da análise: "
+    )
+
+    builder.append(
+        SimpleDateFormat(
+            "yyyy-MM-dd HH:mm:ss",
+            Locale.US
+        ).format(Date())
+    )
+
+    builder.append(
+        "\n\n"
+    )
+
+    builder.append(
+        "URL inicial:\n"
+    )
+
+    builder.append(
+        gameUrl
+    )
+
+    builder.append(
+        "\n\n"
+    )
+
+    builder.append(
+        "Android:\n"
+    )
+
+    builder.append(
+        Build.VERSION.RELEASE
+    )
+
+    builder.append(
+        " (API "
+    )
+
+    builder.append(
+        Build.VERSION.SDK_INT
+    )
+
+    builder.append(
+        ")\n\n"
+    )
+
+    builder.append(
+        "Dispositivo:\n"
+    )
+
+    builder.append(
+        "${Build.MANUFACTURER} ${Build.MODEL}\n\n"
+    )
+
+    builder.append(
+        "USER AGENT:\n"
+    )
+
+    builder.append(
+        userAgent
+    )
+
+    builder.append(
+        "\n\n"
+    )
+
+    builder.append(
+        "==============================================\n"
+    )
+
+    builder.append(
+        "LOG DE EVENTOS\n"
+    )
+
+    builder.append(
+        "==============================================\n\n"
+    )
+
+    val logSnapshot =
+        logs.toList()
+
+    logSnapshot.forEach { log ->
+
+        builder.append(log)
+        builder.append("\n")
+    }
+
+    builder.append(
+        "\n==============================================\n"
+    )
+
+    builder.append(
+        "FIM DO RELATÓRIO\n"
+    )
+
+    builder.append(
+        "==============================================\n"
+    )
+
+    return builder.toString()
+}
+
+private fun saveLogToDownloads() {
+
+    /*
+     * ESTA FUNÇÃO É CHAMADA PELA UI THREAD.
+     *
+     * O WebView é acessado somente aqui,
+     * antes de iniciar a thread de gravação.
+     */
+
+    val userAgent =
+        webViewInstance
+            ?.settings
+            ?.userAgentString
+            ?: "N/D"
+
+    /*
+     * Também fazemos o snapshot do relatório
+     * enquanto ainda estamos na UI thread.
+     *
+     * Depois disso, a thread de gravação
+     * não toca mais no WebView nem na lista
+     * observável diretamente.
+     */
+
+    val reportContent =
+        buildCompleteLog(userAgent)
+
+    Thread {
+
+        try {
+
+            val timestamp =
+                SimpleDateFormat(
+                    "yyyyMMdd_HHmmss",
+                    Locale.US
+                ).format(Date())
+
+            val fileName =
+                "vale_heranca_analise_$timestamp.txt"
+
+            if (
+                Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.Q
+            ) {
+
+                val resolver =
+                    contentResolver
+
+                val values =
+                    ContentValues().apply {
+
+                        put(
+                            MediaStore.Downloads.DISPLAY_NAME,
+                            fileName
                         )
 
-                    if (uri == null) {
+                        put(
+                            MediaStore.Downloads.MIME_TYPE,
+                            "text/plain"
+                        )
 
-                        throw Exception(
-                            "Não foi possível criar o arquivo em Downloads."
+                        put(
+                            MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS
+                        )
+
+                        put(
+                            MediaStore.Downloads.IS_PENDING,
+                            1
                         )
                     }
 
-                    resolver.openOutputStream(
-                        uri
-                    ).use { output ->
+                val uri =
+                    resolver.insert(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        values
+                    )
+
+                if (uri == null) {
+
+                    throw Exception(
+                        "Não foi possível criar o arquivo em Downloads."
+                    )
+                }
+
+                resolver
+                    .openOutputStream(uri)
+                    .use { output ->
 
                         if (output == null) {
 
@@ -1085,397 +1097,412 @@ class MainActivity : ComponentActivity() {
                         }
 
                         output.write(
-                            content.toByteArray(
+                            reportContent.toByteArray(
                                 Charsets.UTF_8
                             )
                         )
                     }
 
-                    val finishedValues =
-                        ContentValues().apply {
+                val finishedValues =
+                    ContentValues().apply {
 
-                            put(
-                                MediaStore.Downloads.IS_PENDING,
-                                0
-                            )
-                        }
-
-                    resolver.update(
-                        uri,
-                        finishedValues,
-                        null,
-                        null
-                    )
-
-                    lastSavedFileName =
-                        fileName
-
-                    runOnUiThread {
-
-                        appendLog(
-                            "[SAVE] Arquivo salvo em Downloads/$fileName"
+                        put(
+                            MediaStore.Downloads.IS_PENDING,
+                            0
                         )
-
-                        Toast.makeText(
-                            this,
-                            "Relatório salvo em Downloads/$fileName",
-                            Toast.LENGTH_LONG
-                        ).show()
                     }
 
-                } else {
-
-                    val downloads =
-                        Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS
-                        )
-
-                    if (!downloads.exists()) {
-                        downloads.mkdirs()
-                    }
-
-                    val file =
-                        File(
-                            downloads,
-                            fileName
-                        )
-
-                    file.writeText(
-                        content,
-                        Charsets.UTF_8
-                    )
-
-                    lastSavedFileName =
-                        fileName
-
-                    runOnUiThread {
-
-                        appendLog(
-                            "[SAVE] Arquivo salvo em ${file.absolutePath}"
-                        )
-
-                        Toast.makeText(
-                            this,
-                            "Relatório salvo em Downloads",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-
-            } catch (e: Exception) {
+                resolver.update(
+                    uri,
+                    finishedValues,
+                    null,
+                    null
+                )
 
                 runOnUiThread {
 
+                    lastSavedFileName =
+                        fileName
+
                     appendLog(
-                        "[SAVE ERROR] ${e.javaClass.simpleName}: ${e.message}"
+                        "[SAVE] Arquivo salvo em Downloads/$fileName"
                     )
 
                     Toast.makeText(
                         this,
-                        "Erro ao salvar relatório",
+                        "Relatório salvo em Downloads/$fileName",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } else {
+
+                @Suppress("DEPRECATION")
+                val downloads =
+                    Environment
+                        .getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS
+                        )
+
+                if (!downloads.exists()) {
+                    downloads.mkdirs()
+                }
+
+                val file =
+                    File(
+                        downloads,
+                        fileName
+                    )
+
+                file.writeText(
+                    reportContent,
+                    Charsets.UTF_8
+                )
+
+                runOnUiThread {
+
+                    lastSavedFileName =
+                        fileName
+
+                    appendLog(
+                        "[SAVE] Arquivo salvo em ${file.absolutePath}"
+                    )
+
+                    Toast.makeText(
+                        this,
+                        "Relatório salvo em Downloads",
                         Toast.LENGTH_LONG
                     ).show()
                 }
             }
 
-        }.start()
-    }
-
-    private fun copyLogsToClipboard() {
-
-        try {
-
-            val clipboard =
-                getSystemService(
-                    Context.CLIPBOARD_SERVICE
-                ) as ClipboardManager
-
-            val content =
-                getCompleteLog()
-
-            clipboard.setPrimaryClip(
-                ClipData.newPlainText(
-                    "Vale Herança Analyzer",
-                    content
-                )
-            )
-
-            appendLog(
-                "[UI] Relatório copiado para a área de transferência."
-            )
-
-            Toast.makeText(
-                this,
-                "Relatório copiado",
-                Toast.LENGTH_SHORT
-            ).show()
-
         } catch (e: Exception) {
 
-            appendLog(
-                "[COPY ERROR] ${e.message}"
+            runOnUiThread {
+
+                appendLog(
+                    "[SAVE ERROR] ${e.javaClass.simpleName}: ${e.message}"
+                )
+
+                Toast.makeText(
+                    this,
+                    "Erro ao salvar relatório: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+    }.start()
+}
+
+private fun copyLogsToClipboard() {
+
+    /*
+     * Este método é chamado pelo botão da interface,
+     * portanto estamos na UI thread.
+     *
+     * Capturamos o User-Agent aqui, antes de gerar
+     * o relatório.
+     */
+
+    try {
+
+        val userAgent =
+            webViewInstance
+                ?.settings
+                ?.userAgentString
+                ?: "N/D"
+
+        val content =
+            buildCompleteLog(userAgent)
+
+        val clipboard =
+            getSystemService(
+                Context.CLIPBOARD_SERVICE
+            ) as ClipboardManager
+
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText(
+                "Vale Herança Analyzer",
+                content
             )
-        }
-    }
+        )
 
-    override fun onResume() {
+        appendLog(
+            "[UI] Relatório copiado para a área de transferência."
+        )
 
-        super.onResume()
+        Toast.makeText(
+            this,
+            "Relatório copiado",
+            Toast.LENGTH_SHORT
+        ).show()
 
-        webViewInstance?.onResume()
-    }
+    } catch (e: Exception) {
 
-    override fun onPause() {
-
-        webViewInstance?.onPause()
-
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-
-        webViewInstance?.apply {
-
-            stopLoading()
-
-            removeAllViews()
-
-            destroy()
-        }
-
-        webViewInstance = null
-
-        super.onDestroy()
+        appendLog(
+            "[COPY ERROR] ${e.message}"
+        )
     }
 }
+
+override fun onResume() {
+
+    super.onResume()
+
+    webViewInstance?.onResume()
+}
+
+override fun onPause() {
+
+    webViewInstance?.onPause()
+
+    super.onPause()
+}
+
+override fun onDestroy() {
+
+    webViewInstance?.apply {
+
+        stopLoading()
+
+        removeAllViews()
+
+        destroy()
+    }
+
+    webViewInstance = null
+
+    super.onDestroy()
+}
+
+
+
+}
+
 
 @Composable
 fun ControlBar(
-    showConsole: Boolean,
-    onToggleConsole: () -> Unit,
-    onReload: () -> Unit,
-    onClearLogs: () -> Unit,
-    onSaveLog: () -> Unit,
-    onCopyLog: () -> Unit
+showConsole: Boolean,
+onToggleConsole: () -> Unit,
+onReload: () -> Unit,
+onClearLogs: () -> Unit,
+onSaveLog: () -> Unit,
+onCopyLog: () -> Unit
 ) {
 
-    Row(
 
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Color(0xFF1E1E1E)
+Row(
+
+    modifier = Modifier
+        .fillMaxWidth()
+        .background(
+            Color(0xFF1E1E1E)
+        )
+        .padding(
+            horizontal = 8.dp,
+            vertical = 4.dp
+        ),
+
+    horizontalArrangement =
+        Arrangement.spacedBy(6.dp),
+
+    verticalAlignment =
+        Alignment.CenterVertically
+) {
+
+    Button(
+
+        onClick = onReload,
+
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor =
+                    Color(0xFF333333)
             )
-            .padding(
-                horizontal = 8.dp,
-                vertical = 4.dp
-            ),
-
-        horizontalArrangement =
-            Arrangement.spacedBy(6.dp),
-
-        verticalAlignment =
-            Alignment.CenterVertically
     ) {
 
-        Button(
+        Text(
+            text = "Recarregar",
+            fontSize = 11.sp,
+            color = Color.White
+        )
+    }
 
-            onClick = onReload,
+    Button(
 
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor =
-                        Color(0xFF333333)
-                )
-        ) {
+        onClick = onToggleConsole,
 
-            Text(
-                text = "Recarregar",
-                fontSize = 11.sp,
-                color = Color.White
-            )
-        }
-
-        Button(
-
-            onClick = onToggleConsole,
-
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor =
-                        if (showConsole)
-                            Color(0xFF007ACC)
-                        else
-                            Color(0xFF333333)
-                )
-        ) {
-
-            Text(
-                text =
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor =
                     if (showConsole)
-                        "Ocultar Log"
+                        Color(0xFF007ACC)
                     else
-                        "Ver Log",
-
-                fontSize = 11.sp,
-
-                color = Color.White
+                        Color(0xFF333333)
             )
-        }
+    ) {
+
+        Text(
+            text =
+                if (showConsole)
+                    "Ocultar Log"
+                else
+                    "Ver Log",
+
+            fontSize = 11.sp,
+
+            color = Color.White
+        )
+    }
+
+    Button(
+
+        onClick = onSaveLog,
+
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor =
+                    Color(0xFF176B3A)
+            )
+    ) {
+
+        Text(
+            text = "SALVAR TXT",
+            fontSize = 11.sp,
+            color = Color.White
+        )
+    }
+
+    Button(
+
+        onClick = onCopyLog,
+
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor =
+                    Color(0xFF444444)
+            )
+    ) {
+
+        Text(
+            text = "COPIAR",
+            fontSize = 11.sp,
+            color = Color.White
+        )
+    }
+
+    if (showConsole) {
 
         Button(
 
-            onClick = onSaveLog,
+            onClick = onClearLogs,
 
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor =
-                        Color(0xFF176B3A)
+                        Color(0xFF552222)
                 )
         ) {
 
             Text(
-                text = "SALVAR TXT",
+                text = "LIMPAR",
                 fontSize = 11.sp,
                 color = Color.White
             )
-        }
-
-        Button(
-
-            onClick = onCopyLog,
-
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor =
-                        Color(0xFF444444)
-                )
-        ) {
-
-            Text(
-                text = "COPIAR",
-                fontSize = 11.sp,
-                color = Color.White
-            )
-        }
-
-        if (showConsole) {
-
-            Button(
-
-                onClick = onClearLogs,
-
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor =
-                            Color(0xFF552222)
-                    )
-            ) {
-
-                Text(
-                    text = "LIMPAR",
-                    fontSize = 11.sp,
-                    color = Color.White
-                )
-            }
         }
     }
 }
+
+
+
+}
+
 
 @Composable
 fun ConsoleView(
-    logs: List<String>,
-    modifier: Modifier = Modifier
+logs: List,
+modifier: Modifier = Modifier
 ) {
 
-    val listState =
-        rememberLazyListState()
 
-    LaunchedEffect(
-        logs.size
-    ) {
+val listState =
+    rememberLazyListState()
 
-        if (logs.isNotEmpty()) {
+LaunchedEffect(
+    logs.size
+) {
 
-            listState.animateScrollToItem(
-                logs.size - 1
-            )
-        }
-    }
+    if (logs.isNotEmpty()) {
 
-    LazyColumn(
-
-        state = listState,
-
-        modifier = modifier
-            .background(
-                Color(0xFF0D0D0D)
-            )
-            .padding(6.dp)
-    ) {
-
-        items(
-            items = logs
-        ) { log ->
-
-            Text(
-
-                text = log,
-
-                color =
-                    when {
-
-                        log.contains(
-                            "[CONSOLE]"
-                        ) ->
-                            Color(0xFF4EC9B0)
-
-                        log.contains(
-                            "[REQUEST]"
-                        ) ->
-                            Color(0xFF569CD6)
-
-                        log.contains(
-                            "[FETCH]"
-                        ) ->
-                            Color(0xFFDCDCAA)
-
-                        log.contains(
-                            "[XHR]"
-                        ) ->
-                            Color(0xFFCE9178)
-
-                        log.contains(
-                            "[WEBSOCKET]"
-                        ) ->
-                            Color(0xFFC586C0)
-
-                        log.contains(
-                            "[RESOURCE]"
-                        ) ->
-                            Color(0xFF9CDCFE)
-
-                        log.contains(
-                            "[PAGE]"
-                        ) ->
-                            Color(0xFFCE9178)
-
-                        log.contains(
-                            "[SAVE]"
-                        ) ->
-                            Color(0xFF6A9955)
-
-                        else ->
-                            Color(0xFFCCCCCC)
-                    },
-
-                fontSize = 10.sp,
-
-                fontFamily =
-                    FontFamily.Monospace,
-
-                lineHeight = 13.sp
-            )
-        }
+        listState.animateScrollToItem(
+            logs.size - 1
+        )
     }
 }
+
+LazyColumn(
+
+    state = listState,
+
+    modifier = modifier
+        .background(
+            Color(0xFF0D0D0D)
+        )
+        .padding(6.dp)
+) {
+
+    items(
+        items = logs
+    ) { log ->
+
+        Text(
+
+            text = log,
+
+            color =
+                when {
+
+                    log.contains("[CONSOLE]") ->
+                        Color(0xFF4EC9B0)
+
+                    log.contains("[REQUEST]") ->
+                        Color(0xFF569CD6)
+
+                    log.contains("[FETCH]") ->
+                        Color(0xFFDCDCAA)
+
+                    log.contains("[XHR]") ->
+                        Color(0xFFCE9178)
+
+                    log.contains("[WEBSOCKET]") ->
+                        Color(0xFFC586C0)
+
+                    log.contains("[RESOURCE]") ->
+                        Color(0xFF9CDCFE)
+
+                    log.contains("[PAGE]") ->
+                        Color(0xFFCE9178)
+
+                    log.contains("[SAVE]") ->
+                        Color(0xFF6A9955)
+
+                    else ->
+                        Color(0xFFCCCCCC)
+                },
+
+            fontSize = 10.sp,
+
+            fontFamily =
+                FontFamily.Monospace,
+
+            lineHeight = 13.sp
+        )
+    }
+}
+
+
+
+}
+
+
