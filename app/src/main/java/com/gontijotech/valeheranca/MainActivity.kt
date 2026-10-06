@@ -1,20 +1,13 @@
-package com.valeherancaanalyzer
-
+package com.gontijotech.valeheranca
 
 import android.annotation.SuppressLint
-import android.content.ContentValues
-import android.os.Build
+import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.provider.MediaStore
+import android.view.ViewGroup
 import android.webkit.ConsoleMessage
-import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -25,208 +18,113 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.atomic.AtomicInteger
+
+class AnalyzerBridge(private val onLog: (String) -> Unit) {
+    @JavascriptInterface
+    fun log(message: String) {
+        onLog("[JS] $message")
+    }
+
+    @JavascriptInterface
+    fun sendData(data: String) {
+        onLog("[DATA] $data")
+    }
+}
 
 class MainActivity : ComponentActivity() {
 
-    companion object {
+    private val logs = mutableStateListOf<String>()
+    private var webViewInstance: WebView? = null
+    private val gameUrl =
+        "https://www.astrocade.com/games/vale-da-heran%C3%A7a-renova%C3%A7%C3%A3o/01M46K2HXGZ4F46MRCKS6WTQ6Y"
 
-        private const val GAME_URL =
-            "https://www.astrocade.com/games/vale-da-heran%C3%A7a-renova%C3%A7%C3%A3o/01M46K2HXGZ4F46MRCKS6WTQ6Y?sharedByCreator=rgr.iereme&surface=web&sharePlatform=copylink&shareId=510ef8fa-6cbc-48f6-8102-88fcb002dcb0&shareOrigin=editor"
-
-        private const val REPORT_FILE_NAME =
-            "vale_heranca_analise.txt"
+    fun appendLog(message: String) {
+        runOnUiThread {
+            logs.add(message)
+        }
     }
 
-    private lateinit var webView: WebView
+    fun getLogs(): List<String> = logs
 
-    private val mainHandler =
-        Handler(Looper.getMainLooper())
-
-    private val requestCounter =
-        AtomicInteger(0)
-
-    private val logLock =
-        Any()
-
-    private val logs =
-        StringBuilder()
-
-    private var logVersion by mutableStateOf(0)
-
-    private var saveRunnable: Runnable? = null
-
-    private var pageStartedAt =
-        System.currentTimeMillis()
-
-    private var lastPageUrl =
-        GAME_URL
-
-    private val analyzerBridge =
-        AnalyzerBridge()
-
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        appendLog("==================================================")
-        appendLog("VALE HERANÇA ANALYZER")
-        appendLog("Inicialização do analisador")
-        appendLog("Android SDK: ${Build.VERSION.SDK_INT}")
-        appendLog("Modelo: ${Build.MODEL}")
-        appendLog("Fabricante: ${Build.MANUFACTURER}")
-        appendLog("==================================================")
-
         setContent {
-
-            var liveLog by remember {
-                mutableStateOf("")
-            }
-
-            var currentUrl by remember {
-                mutableStateOf(GAME_URL)
-            }
-
-            DisposableEffect(logVersion) {
-
-                liveLog = getLogs()
-
-                onDispose {
-                }
-            }
-
             MaterialTheme {
-
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Black
                 ) {
+                    var showConsole by remember { mutableStateOf(false) }
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black)
-                    ) {
-
-                        Text(
-                            text = "VALE HERANÇA ANALYZER",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = 12.dp,
-                                    vertical = 10.dp
-                                )
-                        )
-
-                        Text(
-                            text = currentUrl,
-                            color = Color(0xFFAAAAAA),
-                            fontSize = 10.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = 12.dp
-                                )
-                        )
-
-                        Spacer(
-                            modifier = Modifier.height(6.dp)
-                        )
-
-                        AndroidView(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            factory = { context ->
-
-                                createWebView().also {
-                                    webView = it
-                                    it.loadUrl(GAME_URL)
-                                }
-                            },
-                            update = { view ->
-
-                                currentUrl =
-                                    view.url ?: GAME_URL
-                            }
-                        )
-
-                        ControlBar()
-
-                        Text(
-                            text = "LOG DO ANALISADOR",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = 12.dp,
-                                    vertical = 6.dp
-                                )
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ControlBar(
+                            showConsole = showConsole,
+                            onToggleConsole = { showConsole = !showConsole },
+                            onReload = { webViewInstance?.reload() },
+                            onClearLogs = { logs.clear() }
                         )
 
                         Box(
                             modifier = Modifier
+                                .weight(1f)
                                 .fillMaxWidth()
-                                .height(190.dp)
-                                .padding(
-                                    horizontal = 8.dp
-                                )
-                                .background(
-                                    Color(0xFF080808)
-                                )
                         ) {
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(
-                                        rememberScrollState()
-                                    )
-                                    .padding(8.dp)
-                            ) {
-
-                                Text(
-                                    text = liveLog,
-                                    color = Color(0xFF35C759),
-                                    fontSize = 10.sp
-                                )
-                            }
+                            AndroidView(
+                                modifier = Modifier.fillMaxSize(),
+                                factory = { context ->
+                                    WebView(context).apply {
+                                        layoutParams = ViewGroup.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
+                                        setBackgroundColor(AndroidColor.BLACK)
+                                        configureWebView(this)
+                                        addJavascriptInterface(
+                                            AnalyzerBridge { appendLog(it) },
+                                            "AnalyzerBridge"
+                                        )
+                                        loadUrl(gameUrl)
+                                        webViewInstance = this
+                                    }
+                                }
+                            )
                         }
 
-                        Spacer(
-                            modifier = Modifier.height(6.dp)
-                        )
+                        if (showConsole) {
+                            ConsoleView(
+                                logs = logs,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -234,24 +132,127 @@ class MainActivity : ComponentActivity() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun createWebView(): WebView {
+    private fun configureWebView(wv: WebView) {
+        wv.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            mediaPlaybackRequiresUserGesture = false
+            cacheMode = WebSettings.LOAD_DEFAULT
+        }
 
-        return WebView(this).apply {
+        wv.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                appendLog("[PAGE] Iniciando: $url")
+            }
 
-            setBackgroundColor(Color.BLACK.value.toInt())
+            override fun onPageFinished(view: WebView?, url: String?) {
+                appendLog("[PAGE] Concluído: $url")
+            }
+        }
 
-            settings.apply {
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                consoleMessage?.let {
+                    appendLog("[CONSOLE] ${it.message()} (${it.sourceId()}:${it.lineNumber()})")
+                }
+                return true
+            }
+        }
+    }
 
-                javaScriptEnabled = true
+    override fun onResume() {
+        super.onResume()
+        webViewInstance?.onResume()
+    }
 
-                domStorageEnabled = true
+    override fun onPause() {
+        super.onPause()
+        webViewInstance?.onPause()
+    }
 
-                databaseEnabled = true
+    override fun onDestroy() {
+        webViewInstance?.destroy()
+        super.onDestroy()
+    }
+}
 
-                allowFileAccess = true
+@Composable
+fun ControlBar(
+    showConsole: Boolean,
+    onToggleConsole: () -> Unit,
+    onReload: () -> Unit,
+    onClearLogs: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1E1E1E))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Button(
+            onClick = onReload,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))
+        ) {
+            Text("Recarregar", fontSize = 12.sp, color = Color.White)
+        }
 
-                allowContentAccess = true
+        Button(
+            onClick = onToggleConsole,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (showConsole) Color(0xFF007ACC) else Color(0xFF333333)
+            )
+        ) {
+            Text(if (showConsole) "Ocultar Log" else "Ver Log", fontSize = 12.sp, color = Color.White)
+        }
 
-                loadsImagesAutomatically = true
+        if (showConsole) {
+            Button(
+                onClick = onClearLogs,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF552222))
+            ) {
+                Text("Limpar", fontSize = 12.sp, color = Color.White)
+            }
+        }
+    }
+}
 
-                mediaPlaybackRequires
+@Composable
+fun ConsoleView(
+    logs: List<String>,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(logs.size) {
+        if (logs.isNotEmpty()) {
+            listState.animateScrollToItem(logs.size - 1)
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier
+            .background(Color(0xFF0D0D0D))
+            .padding(6.dp)
+    ) {
+        items(logs) { log ->
+            Text(
+                text = log,
+                color = when {
+                    log.contains("[CONSOLE]") -> Color(0xFF4EC9B0)
+                    log.contains("[PAGE]") -> Color(0xFFCE9178)
+                    log.contains("[DATA]") -> Color(0xFFDCDCAA)
+                    else -> Color(0xFFCCCCCC)
+                },
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
