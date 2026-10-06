@@ -36,6 +36,9 @@ jobs:
       - name: Verify Gradle
         run: gradle --version
 
+      - name: Clean project
+        run: gradle clean
+
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
 
