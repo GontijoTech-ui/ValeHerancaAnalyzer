@@ -1,11 +1,8 @@
 package com.gontijotech.valeheranca
 
 import android.annotation.SuppressLint
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ContentValues
-import android.content.Context
-import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -20,7 +17,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -40,10 +36,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -67,1455 +67,190 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
 
-    private val handler =
+    private val mainHandler =
         Handler(Looper.getMainLooper())
 
     private val requestCounter =
         AtomicInteger(0)
 
-    private var logText by mutableStateOf("")
+    private val logLock =
+        Any()
 
-    private var pageTitle by mutableStateOf(
-        "Aguardando..."
-    )
+    private val logs =
+        StringBuilder()
 
-    private var currentUrl by mutableStateOf("")
+    private var logVersion by mutableStateOf(0)
 
-    private var reportUri: Uri? = null
+    private var saveRunnable: Runnable? = null
 
-    private var saveScheduled = false
+    private var pageStartedAt =
+        System.currentTimeMillis()
 
-    private val saveRunnable = Runnable {
-        saveScheduled = false
-        saveReport()
-    }
+    private var lastPageUrl =
+        GAME_URL
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
+    private val analyzerBridge =
+        AnalyzerBridge()
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        createReportFile()
+        appendLog("==================================================")
+        appendLog("VALE HERANÇA ANALYZER")
+        appendLog("Inicialização do analisador")
+        appendLog("Android SDK: ${Build.VERSION.SDK_INT}")
+        appendLog("Modelo: ${Build.MODEL}")
+        appendLog("Fabricante: ${Build.MANUFACTURER}")
+        appendLog("==================================================")
 
         setContent {
 
-            AnalyzerScreen(
-                log = logText,
-                title = pageTitle,
-                url = currentUrl,
+            var liveLog by remember {
+                mutableStateOf("")
+            }
 
-                onReload = {
+            var currentUrl by remember {
+                mutableStateOf(GAME_URL)
+            }
 
-                    if (::webView.isInitialized) {
+            DisposableEffect(logVersion) {
 
-                        addLog(
-                            "===== RECARREGANDO ====="
-                        )
+                liveLog = getLogs()
 
-                        webView.reload()
-                    }
-                },
+                onDispose {
+                }
+            }
 
-                onBack = {
+            MaterialTheme {
 
-                    if (
-                        ::webView.isInitialized &&
-                        webView.canGoBack()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color.Black
+                ) {
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
                     ) {
 
-                        addLog(
-                            "[NAV] VOLTAR"
+                        Text(
+                            text = "VALE HERANÇA ANALYZER",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 10.dp
+                                )
                         )
 
-                        webView.goBack()
-                    }
-                },
-
-                onForward = {
-
-                    if (
-                        ::webView.isInitialized &&
-                        webView.canGoForward()
-                    ) {
-
-                        addLog(
-                            "[NAV] AVANÇAR"
+                        Text(
+                            text = currentUrl,
+                            color = Color(0xFFAAAAAA),
+                            fontSize = 10.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 12.dp
+                                )
                         )
 
-                        webView.goForward()
-                    }
-                },
-
-                onCopy = {
-                    copyLog()
-                },
-
-                onClear = {
-                    clearLog()
-                },
-
-                onSave = {
-
-                    saveReport()
-
-                    Toast.makeText(
-                        this,
-                        "Relatório salvo em Downloads",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                },
-
-                onWebViewCreated = { view ->
-
-                    webView = view
-
-                    configureWebView(view)
-
-                    addLog(
-                        "========================================"
-                    )
-
-                    addLog(
-                        "VALE HERANÇA ANALYZER"
-                    )
-
-                    addLog(
-                        "========================================"
-                    )
-
-                    addLog(
-                        "Aplicativo iniciado"
-                    )
-
-                    addLog(
-                        "Android: " +
-                                android.os.Build.VERSION.RELEASE
-                    )
-
-                    addLog(
-                        "SDK: " +
-                                android.os.Build.VERSION.SDK_INT
-                    )
-
-                    addLog(
-                        "WebView: " +
-                                getWebViewVersion()
-                    )
-
-                    addLog(
-                        "Relatório:"
-                    )
-
-                    addLog(
-                        "Downloads/$REPORT_FILE_NAME"
-                    )
-
-                    addLog("")
-
-                    addLog(
-                        "URL inicial:"
-                    )
-
-                    addLog(GAME_URL)
-
-                    addLog("")
-
-                    addLog(
-                        "Carregando jogo..."
-                    )
-
-                    addLog("")
-
-                    view.loadUrl(GAME_URL)
-                }
-            )
-        }
-    }
-
-    // ============================================================
-    // CONFIGURAÇÃO WEBVIEW
-    // ============================================================
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun configureWebView(
-        view: WebView
-    ) {
-
-        val settings = view.settings
-
-        settings.javaScriptEnabled = true
-
-        settings.domStorageEnabled = true
-
-        settings.databaseEnabled = true
-
-        settings.allowFileAccess = true
-
-        settings.allowContentAccess = true
-
-        settings.loadsImagesAutomatically = true
-
-        settings.blockNetworkImage = false
-
-        settings.javaScriptCanOpenWindowsAutomatically =
-            true
-
-        settings.setSupportMultipleWindows(false)
-
-        settings.mediaPlaybackRequiresUserGesture =
-            false
-
-        settings.cacheMode =
-            WebSettings.LOAD_DEFAULT
-
-        settings.userAgentString =
-            settings.userAgentString +
-                    " ValeHerancaAnalyzer/1.0"
-
-        CookieManager
-            .getInstance()
-            .setAcceptCookie(true)
-
-        CookieManager
-            .getInstance()
-            .setAcceptThirdPartyCookies(
-                view,
-                true
-            )
-
-        view.addJavascriptInterface(
-            JsBridge(),
-            "VALE_ANALYZER"
-        )
-
-        view.webViewClient =
-            createWebViewClient()
-
-        view.webChromeClient =
-            createWebChromeClient()
-    }
-
-    // ============================================================
-    // WEBVIEW CLIENT
-    // ============================================================
-
-    private fun createWebViewClient():
-            WebViewClient {
-
-        return object : WebViewClient() {
-
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest
-            ): Boolean {
-
-                addLog(
-                    "[NAVIGATION] " +
-                            request.method +
-                            " " +
-                            request.url
-                )
-
-                return false
-            }
-
-            override fun onPageStarted(
-                view: WebView,
-                url: String,
-                favicon: android.graphics.Bitmap?
-            ) {
-
-                super.onPageStarted(
-                    view,
-                    url,
-                    favicon
-                )
-
-                currentUrl = url
-
-                addLog("")
-
-                addLog(
-                    "========================================"
-                )
-
-                addLog(
-                    "[PAGE START]"
-                )
-
-                addLog(url)
-
-                addLog(
-                    "========================================"
-                )
-            }
-
-            override fun onPageFinished(
-                view: WebView,
-                url: String
-            ) {
-
-                super.onPageFinished(
-                    view,
-                    url
-                )
-
-                currentUrl = url
-
-                pageTitle =
-                    view.title
-                        ?: "Sem título"
-
-                addLog("")
-
-                addLog(
-                    "[PAGE FINISHED]"
-                )
-
-                addLog(
-                    "Título: ${view.title}"
-                )
-
-                addLog(
-                    "URL: $url"
-                )
-
-                val cookies =
-                    CookieManager
-                        .getInstance()
-                        .getCookie(url)
-
-                if (!cookies.isNullOrBlank()) {
-
-                    addLog(
-                        "[COOKIE] " +
-                                "${cookies.length} caracteres"
-                    )
-
-                } else {
-
-                    addLog(
-                        "[COOKIE] Nenhum cookie"
-                    )
-                }
-
-                addLog("")
-
-                addLog(
-                    "[JAVASCRIPT] " +
-                            "Instalando analisador..."
-                )
-
-                injectJavaScriptAnalyzer(view)
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest
-            ): WebResourceResponse? {
-
-                logResourceRequest(
-                    request.method,
-                    request.url.toString(),
-                    request.isForMainFrame
-                )
-
-                return null
-            }
-
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: WebResourceError
-            ) {
-
-                super.onReceivedError(
-                    view,
-                    request,
-                    error
-                )
-
-                addLog("")
-
-                addLog(
-                    "[WEB ERROR]"
-                )
-
-                addLog(
-                    "URL: ${request.url}"
-                )
-
-                addLog(
-                    "Código: ${error.errorCode}"
-                )
-
-                addLog(
-                    "Descrição: ${error.description}"
-                )
-            }
-
-            override fun onReceivedHttpError(
-                view: WebView,
-                request: WebResourceRequest,
-                errorResponse: WebResourceResponse
-            ) {
-
-                super.onReceivedHttpError(
-                    view,
-                    request,
-                    errorResponse
-                )
-
-                addLog("")
-
-                addLog(
-                    "[HTTP ERROR]"
-                )
-
-                addLog(
-                    "URL: ${request.url}"
-                )
-
-                addLog(
-                    "Status: " +
-                            errorResponse.statusCode
-                )
-
-                addLog(
-                    "Mensagem: " +
-                            errorResponse.reasonPhrase
-                )
-            }
-        }
-    }
-
-    // ============================================================
-    // WEB CHROME
-    // ============================================================
-
-    private fun createWebChromeClient():
-            WebChromeClient {
-
-        return object : WebChromeClient() {
-
-            override fun onConsoleMessage(
-                message: ConsoleMessage
-            ): Boolean {
-
-                addLog(
-                    "[JS CONSOLE] " +
-                            message.messageLevel() +
-                            " | " +
-                            message.message() +
-                            " | linha " +
-                            message.lineNumber()
-                )
-
-                return true
-            }
-
-            override fun onProgressChanged(
-                view: WebView,
-                progress: Int
-            ) {
-
-                super.onProgressChanged(
-                    view,
-                    progress
-                )
-
-                if (progress == 100) {
-
-                    addLog(
-                        "[PAGE] carregamento 100%"
-                    )
-                }
-            }
-        }
-    }
-
-    // ============================================================
-    // REQUISIÇÕES
-    // ============================================================
-
-    private fun logResourceRequest(
-        method: String,
-        url: String,
-        mainFrame: Boolean
-    ) {
-
-        val id =
-            requestCounter.incrementAndGet()
-
-        val type =
-            detectResourceType(url)
-
-        val frame =
-            if (mainFrame) {
-                "[MAIN] "
-            } else {
-                ""
-            }
-
-        addLog(
-            "[REQ #$id] " +
-                    "$method " +
-                    "$frame" +
-                    "[$type] " +
-                    url
-        )
-    }
-
-    private fun detectResourceType(
-        url: String
-    ): String {
-
-        val lower =
-            url.lowercase(Locale.US)
-
-        return when {
-
-            lower.contains(".js") ||
-                    lower.contains("javascript") ->
-                "JS"
-
-            lower.contains(".css") ->
-                "CSS"
-
-            lower.contains(".json") ||
-                    lower.contains("json") ->
-                "JSON"
-
-            lower.contains(".png") ||
-                    lower.contains(".jpg") ||
-                    lower.contains(".jpeg") ||
-                    lower.contains(".webp") ||
-                    lower.contains(".gif") ||
-                    lower.contains(".svg") ||
-                    lower.contains(".avif") ->
-                "IMAGE"
-
-            lower.contains(".mp3") ||
-                    lower.contains(".wav") ||
-                    lower.contains(".ogg") ||
-                    lower.contains(".m4a") ||
-                    lower.contains(".aac") ->
-                "AUDIO"
-
-            lower.contains(".mp4") ||
-                    lower.contains(".webm") ||
-                    lower.contains(".m3u8") ->
-                "VIDEO"
-
-            lower.contains(".woff") ||
-                    lower.contains(".woff2") ||
-                    lower.contains(".ttf") ||
-                    lower.contains(".otf") ->
-                "FONT"
-
-            lower.contains(".wasm") ->
-                "WASM"
-
-            lower.contains("/api/") ||
-                    lower.contains("/api") ->
-                "API"
-
-            lower.startsWith("data:") ->
-                "DATA"
-
-            else ->
-                "OTHER"
-        }
-    }
-
-    // ============================================================
-    // JAVASCRIPT
-    // ============================================================
-
-    private fun injectJavaScriptAnalyzer(
-        view: WebView
-    ) {
-
-        val script = """
-            (function() {
-
-                if (window.__VALE_ANALYZER__) {
-                    return;
-                }
-
-                window.__VALE_ANALYZER__ = true;
-
-                function send(type, data) {
-
-                    try {
-
-                        window.VALE_ANALYZER.log(
-                            type + "|" + String(data)
-                        );
-
-                    } catch(e) {}
-                }
-
-                send(
-                    "PAGE",
-                    document.title +
-                    " | " +
-                    location.href
-                );
-
-                /*
-                 * FETCH
-                 */
-
-                try {
-
-                    const originalFetch =
-                        window.fetch;
-
-                    window.fetch =
-                        function() {
-
-                            try {
-
-                                let input =
-                                    arguments[0];
-
-                                let url =
-                                    typeof input === "string"
-                                    ? input
-                                    : (
-                                        input &&
-                                        input.url
-                                        ? input.url
-                                        : String(input)
-                                    );
-
-                                let method = "GET";
-
-                                if (
-                                    arguments[1] &&
-                                    arguments[1].method
-                                ) {
-
-                                    method =
-                                        arguments[1].method;
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        AndroidView(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            factory = { context ->
+
+                                createWebView().also {
+                                    webView = it
+                                    it.loadUrl(GAME_URL)
                                 }
+                            },
+                            update = { view ->
 
-                                send(
-                                    "FETCH",
-                                    method +
-                                    " " +
-                                    url
-                                );
+                                currentUrl =
+                                    view.url ?: GAME_URL
+                            }
+                        )
 
-                            } catch(e) {}
+                        ControlBar()
 
-                            return originalFetch.apply(
-                                this,
-                                arguments
-                            );
-                        };
+                        Text(
+                            text = "LOG DO ANALISADOR",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 6.dp
+                                )
+                        )
 
-                } catch(e) {
-
-                    send(
-                        "ERROR",
-                        "fetch hook " + e
-                    );
-                }
-
-                /*
-                 * XHR
-                 */
-
-                try {
-
-                    const originalOpen =
-                        XMLHttpRequest
-                            .prototype
-                            .open;
-
-                    XMLHttpRequest
-                        .prototype
-                        .open =
-                        function(
-                            method,
-                            url
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(190.dp)
+                                .padding(
+                                    horizontal = 8.dp
+                                )
+                                .background(
+                                    Color(0xFF080808)
+                                )
                         ) {
 
-                            try {
-
-                                send(
-                                    "XHR",
-                                    String(method) +
-                                    " " +
-                                    String(url)
-                                );
-
-                            } catch(e) {}
-
-                            return originalOpen.apply(
-                                this,
-                                arguments
-                            );
-                        };
-
-                } catch(e) {
-
-                    send(
-                        "ERROR",
-                        "XHR hook " + e
-                    );
-                }
-
-                /*
-                 * WEBSOCKET
-                 */
-
-                try {
-
-                    const OriginalWebSocket =
-                        window.WebSocket;
-
-                    window.WebSocket =
-                        function(
-                            url,
-                            protocols
-                        ) {
-
-                            try {
-
-                                send(
-                                    "WEBSOCKET",
-                                    String(url)
-                                );
-
-                            } catch(e) {}
-
-                            if (
-                                protocols !== undefined
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(
+                                        rememberScrollState()
+                                    )
+                                    .padding(8.dp)
                             ) {
 
-                                return new OriginalWebSocket(
-                                    url,
-                                    protocols
-                                );
-
+                                Text(
+                                    text = liveLog,
+                                    color = Color(0xFF35C759),
+                                    fontSize = 10.sp
+                                )
                             }
-
-                            return new OriginalWebSocket(
-                                url
-                            );
-                        };
-
-                    window.WebSocket.prototype =
-                        OriginalWebSocket.prototype;
-
-                } catch(e) {
-
-                    send(
-                        "ERROR",
-                        "WebSocket hook " + e
-                    );
-                }
-
-                /*
-                 * CONSOLE.LOG
-                 */
-
-                try {
-
-                    const originalLog =
-                        console.log;
-
-                    console.log =
-                        function() {
-
-                            try {
-
-                                send(
-                                    "CONSOLE",
-                                    Array
-                                        .prototype
-                                        .slice
-                                        .call(arguments)
-                                        .join(" ")
-                                );
-
-                            } catch(e) {}
-
-                            originalLog.apply(
-                                console,
-                                arguments
-                            );
-                        };
-
-                } catch(e) {}
-
-                /*
-                 * INFORMAÇÕES
-                 */
-
-                try {
-
-                    send(
-                        "INFO",
-                        "viewport=" +
-                        window.innerWidth +
-                        "x" +
-                        window.innerHeight
-                    );
-
-                    send(
-                        "INFO",
-                        "devicePixelRatio=" +
-                        window.devicePixelRatio
-                    );
-
-                    send(
-                        "INFO",
-                        "language=" +
-                        navigator.language
-                    );
-
-                    send(
-                        "INFO",
-                        "userAgent=" +
-                        navigator.userAgent
-                    );
-
-                } catch(e) {}
-
-            })();
-        """.trimIndent()
-
-        view.evaluateJavascript(
-            script,
-            null
-        )
-    }
-
-    // ============================================================
-    // BRIDGE
-    // ============================================================
-
-    inner class JsBridge {
-
-        @JavascriptInterface
-        fun log(
-            message: String?
-        ) {
-
-            if (message.isNullOrBlank()) {
-                return
-            }
-
-            runOnUiThread {
-
-                val separator =
-                    message.indexOf("|")
-
-                if (separator <= 0) {
-
-                    addLog(
-                        "[JS] $message"
-                    )
-
-                    return@runOnUiThread
-                }
-
-                val type =
-                    message.substring(
-                        0,
-                        separator
-                    )
-
-                val data =
-                    message.substring(
-                        separator + 1
-                    )
-
-                addLog(
-                    "[JS $type] $data"
-                )
-            }
-        }
-    }
-
-    // ============================================================
-    // LOG
-    // ============================================================
-
-    private fun addLog(
-        message: String
-    ) {
-
-        val timestamp =
-            SimpleDateFormat(
-                "HH:mm:ss.SSS",
-                Locale.getDefault()
-            ).format(Date())
-
-        val line =
-            "[$timestamp] $message"
-
-        logText =
-            if (logText.isEmpty()) {
-                line
-            } else {
-                logText + "\n" + line
-            }
-
-        if (logText.length > 5_000_000) {
-
-            logText =
-                logText.takeLast(4_000_000)
-        }
-
-        scheduleSave()
-    }
-
-    private fun clearLog() {
-
-        logText = ""
-
-        requestCounter.set(0)
-
-        addLog(
-            "===== LOG LIMPO ====="
-        )
-    }
-
-    // ============================================================
-    // ARQUIVO TXT
-    // ============================================================
-
-    private fun createReportFile() {
-
-        try {
-
-            val resolver =
-                contentResolver
-
-            val collection =
-                MediaStore.Downloads
-                    .EXTERNAL_CONTENT_URI
-
-            val projection =
-                arrayOf(
-                    MediaStore.Downloads._ID,
-                    MediaStore.Downloads.DISPLAY_NAME
-                )
-
-            resolver.query(
-                collection,
-                projection,
-                "${MediaStore.Downloads.DISPLAY_NAME} = ?",
-                arrayOf(REPORT_FILE_NAME),
-                null
-            )?.use { cursor ->
-
-                if (cursor.moveToFirst()) {
-
-                    val id =
-                        cursor.getLong(
-                            cursor.getColumnIndexOrThrow(
-                                MediaStore.Downloads._ID
-                            )
-                        )
-
-                    reportUri =
-                        Uri.withAppendedPath(
-                            collection,
-                            id.toString()
-                        )
-
-                    return
-                }
-            }
-
-            val values =
-                ContentValues().apply {
-
-                    put(
-                        MediaStore.Downloads.DISPLAY_NAME,
-                        REPORT_FILE_NAME
-                    )
-
-                    put(
-                        MediaStore.Downloads.MIME_TYPE,
-                        "text/plain"
-                    )
-
-                    put(
-                        MediaStore.Downloads.IS_PENDING,
-                        0
-                    )
-                }
-
-            reportUri =
-                resolver.insert(
-                    collection,
-                    values
-                )
-
-        } catch (e: Exception) {
-
-            e.printStackTrace()
-        }
-    }
-
-    private fun scheduleSave() {
-
-        if (saveScheduled) {
-            return
-        }
-
-        saveScheduled = true
-
-        handler.postDelayed(
-            saveRunnable,
-            1500
-        )
-    }
-
-    private fun saveReport() {
-
-        val uri =
-            reportUri
-                ?: run {
-
-                    createReportFile()
-
-                    reportUri
-                }
-                ?: return
-
-        try {
-
-            contentResolver
-                .openOutputStream(
-                    uri,
-                    "wt"
-                )
-                ?.use { output ->
-
-                    val header = """
-                        ========================================
-                        VALE HERANÇA ANALYZER
-                        RELATÓRIO DE ANÁLISE
-                        ========================================
-
-                        Data:
-                        ${Date()}
-
-                        Página:
-                        $currentUrl
-
-                        Título:
-                        $pageTitle
-
-                        Requisições observadas:
-                        ${requestCounter.get()}
-
-                        ========================================
-                        LOG
-                        ========================================
-
-                    """.trimIndent()
-
-                    output.write(
-                        header.toByteArray(
-                            Charsets.UTF_8
-                        )
-                    )
-
-                    output.write(
-                        logText.toByteArray(
-                            Charsets.UTF_8
-                        )
-                    )
-
-                    output.flush()
-                }
-
-        } catch (e: Exception) {
-
-            e.printStackTrace()
-        }
-    }
-
-    // ============================================================
-    // COPIAR
-    // ============================================================
-
-    private fun copyLog() {
-
-        val clipboard =
-            getSystemService(
-                Context.CLIPBOARD_SERVICE
-            ) as ClipboardManager
-
-        clipboard.setPrimaryClip(
-            ClipData.newPlainText(
-                "Vale Herança Log",
-                logText
-            )
-        )
-
-        Toast.makeText(
-            this,
-            "Log copiado",
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-
-    // ============================================================
-    // WEBVIEW VERSION
-    // ============================================================
-
-    private fun getWebViewVersion(): String {
-
-        return try {
-
-            val info =
-                packageManager.getPackageInfo(
-                    "com.google.android.webview",
-                    0
-                )
-
-            info.versionName
-                ?: "desconhecida"
-
-        } catch (e: Exception) {
-
-            try {
-
-                val info =
-                    packageManager.getPackageInfo(
-                        "com.android.webview",
-                        0
-                    )
-
-                info.versionName
-                    ?: "desconhecida"
-
-            } catch (e2: Exception) {
-
-                "não identificada"
-            }
-        }
-    }
-
-    override fun onDestroy() {
-
-        saveReport()
-
-        handler.removeCallbacks(
-            saveRunnable
-        )
-
-        if (::webView.isInitialized) {
-
-            webView.stopLoading()
-
-            webView.destroy()
-        }
-
-        super.onDestroy()
-    }
-}
-
-// ================================================================
-// TELA
-// ================================================================
-
-@androidx.compose.runtime.Composable
-private fun AnalyzerScreen(
-    log: String,
-    title: String,
-    url: String,
-    onReload: () -> Unit,
-    onBack: () -> Unit,
-    onForward: () -> Unit,
-    onCopy: () -> Unit,
-    onClear: () -> Unit,
-    onSave: () -> Unit,
-    onWebViewCreated: (WebView) -> Unit
-) {
-
-    val scrollState =
-        rememberScrollState()
-
-    MaterialTheme {
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Color.Black
-                )
-        ) {
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp)
-            ) {
-
-                Text(
-                    text = "VALE HERANÇA",
-                    color = Color.White,
-                    fontSize = 19.sp
-                )
-
-                Text(
-                    text = "ANALYZER",
-                    color = Color(
-                        android.graphics.Color.rgb(
-                            229,
-                            9,
-                            20
-                        )
-                    ),
-                    fontSize = 13.sp
-                )
-
-                Spacer(
-                    modifier = Modifier
-                        .height(5.dp)
-                )
-
-                Text(
-                    text = title,
-                    color = Color.LightGray,
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
-
-                Text(
-                    text = url,
-                    color = Color.Gray,
-                    fontSize = 9.sp,
-                    maxLines = 2
-                )
-            }
-
-            androidx.compose.material3.HorizontalDivider(
-                color = Color.DarkGray
-            )
-
-            /*
-             * JOGO
-             */
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(
-                        Color.White
-                    )
-            ) {
-
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxSize(),
-
-                    factory = { context ->
-
-                        WebView(context).also {
-                            onWebViewCreated(it)
                         }
-                    }
-                )
-            }
 
-            /*
-             * LOG
-             */
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(210.dp)
-                    .background(
-                        Color(
-                            android.graphics.Color.rgb(
-                                8,
-                                8,
-                                8
-                            )
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
                         )
-                    )
-                    .verticalScroll(
-                        scrollState
-                    )
-                    .padding(8.dp)
-            ) {
-
-                Text(
-                    text = log,
-                    color = Color(
-                        android.graphics.Color.rgb(
-                            53,
-                            199,
-                            89
-                        )
-                    ),
-                    fontSize = 9.sp
-                )
-            }
-
-            /*
-             * CONTROLES
-             */
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Color.Black
-                    )
-                    .padding(6.dp)
-            ) {
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-
-                    horizontalArrangement =
-                        Arrangement.spacedBy(
-                            5.dp
-                        )
-                ) {
-
-                    Button(
-                        onClick = onBack,
-                        modifier =
-                            Modifier.weight(1f),
-
-                        colors =
-                            ButtonDefaults
-                                .buttonColors(
-                                    containerColor =
-                                        Color(
-                                            android.graphics.Color.rgb(
-                                                35,
-                                                35,
-                                                35
-                                            )
-                                        )
-                                )
-                    ) {
-
-                        Text("←")
-                    }
-
-                    Button(
-                        onClick = onForward,
-                        modifier =
-                            Modifier.weight(1f),
-
-                        colors =
-                            ButtonDefaults
-                                .buttonColors(
-                                    containerColor =
-                                        Color(
-                                            android.graphics.Color.rgb(
-                                                35,
-                                                35,
-                                                35
-                                            )
-                                        )
-                                )
-                    ) {
-
-                        Text("→")
-                    }
-
-                    Button(
-                        onClick = onReload,
-                        modifier =
-                            Modifier.weight(1f),
-
-                        colors =
-                            ButtonDefaults
-                                .buttonColors(
-                                    containerColor =
-                                        Color(
-                                            android.graphics.Color.rgb(
-                                                35,
-                                                35,
-                                                35
-                                            )
-                                        )
-                                )
-                    ) {
-
-                        Text("↻")
-                    }
-                }
-
-                Spacer(
-                    modifier = Modifier
-                        .height(5.dp)
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-
-                    horizontalArrangement =
-                        Arrangement.spacedBy(
-                            5.dp
-                        )
-                ) {
-
-                    OutlinedButton(
-                        onClick = onCopy,
-                        modifier =
-                            Modifier.weight(1f)
-                    ) {
-
-                        Text("COPIAR")
-                    }
-
-                    OutlinedButton(
-                        onClick = onClear,
-                        modifier =
-                            Modifier.weight(1f)
-                    ) {
-
-                        Text("LIMPAR")
-                    }
-
-                    Button(
-                        onClick = onSave,
-                        modifier =
-                            Modifier.weight(1f),
-
-                        colors =
-                            ButtonDefaults
-                                .buttonColors(
-                                    containerColor =
-                                        Color(
-                                            android.graphics.Color.rgb(
-                                                229,
-                                                9,
-                                                20
-                                            )
-                                        )
-                                )
-                    ) {
-
-                        Text("SALVAR TXT")
                     }
                 }
             }
         }
     }
-}
 
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createWebView(): WebView {
 
+        return WebView(this).apply {
 
+            setBackgroundColor(Color.BLACK.value.toInt())
+
+            settings.apply {
+
+                javaScriptEnabled = true
+
+                domStorageEnabled = true
+
+                databaseEnabled = true
+
+                allowFileAccess = true
+
+                allowContentAccess = true
+
+                loadsImagesAutomatically = true
+
+                mediaPlaybackRequires
