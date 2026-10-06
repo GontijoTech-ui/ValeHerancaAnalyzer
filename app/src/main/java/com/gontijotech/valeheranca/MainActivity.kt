@@ -124,10 +124,9 @@ class MainActivity : ComponentActivity() {
                                 )
 
                                 /*
-                                 * reload() também é uma chamada WebView.
-                                 *
-                                 * Garantimos que aconteça na thread
-                                 * da própria WebView.
+                                 * reload() é uma chamada WebView.
+                                 * Garantimos execução na UI thread
+                                 * da WebView.
                                  */
                                 webViewInstance?.post {
 
@@ -144,9 +143,6 @@ class MainActivity : ComponentActivity() {
 
                             onClearLogs = {
 
-                                /*
-                                 * Botão da UI já está na main thread.
-                                 */
                                 logs.clear()
 
                                 appendLog(
@@ -222,15 +218,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Todos os logs são adicionados na UI thread.
-     *
-     * Isso é importante porque:
-     *
-     * - shouldInterceptRequest pode estar fora da UI thread
-     * - JavascriptInterface possui sua própria thread
-     * - callbacks de WebView podem chegar em momentos diferentes
-     */
+    // ============================================================
+    // LOG
+    // ============================================================
+
     private fun appendLog(message: String) {
 
         runOnUiThread {
@@ -303,11 +294,6 @@ class MainActivity : ComponentActivity() {
                     "[PAGE START] $url"
                 )
 
-                /*
-                 * NÃO chamamos evaluateJavascript diretamente.
-                 *
-                 * scheduleAnalyzerInjection usa view.post().
-                 */
                 scheduleAnalyzerInjection(view)
             }
 
@@ -333,15 +319,10 @@ class MainActivity : ComponentActivity() {
             ): WebResourceResponse? {
 
                 /*
-                 * IMPORTANTE:
+                 * Este callback pode acontecer em thread
+                 * diferente da UI.
                  *
-                 * Este callback pode acontecer em thread de
-                 * background.
-                 *
-                 * Portanto aqui só fazemos LEITURA da requisição
-                 * e enviamos texto para appendLog().
-                 *
-                 * Não chamamos nenhum método da WebView.
+                 * Não fazemos chamadas WebView aqui.
                  */
 
                 if (request != null) {
@@ -485,12 +466,8 @@ class MainActivity : ComponentActivity() {
         }
 
         /*
-         * WebView.post() coloca a execução na fila da UI thread
-         * da própria WebView.
-         *
-         * Isso resolve o erro:
-         *
-         * "A WebView method was called on thread 'Thread-4'."
+         * WebView.post() garante que evaluateJavascript()
+         * seja executado na UI thread.
          */
 
         view.post {
@@ -1007,13 +984,6 @@ class MainActivity : ComponentActivity() {
     // RELATÓRIO
     // ============================================================
 
-    /*
-     * IMPORTANTE:
-     *
-     * Esta função não acessa WebView.
-     *
-     * Também recebe uma cópia dos logs.
-     */
     private fun buildCompleteLog(
         userAgent: String,
         logSnapshot: List<String>
@@ -1122,11 +1092,16 @@ class MainActivity : ComponentActivity() {
         )
 
         /*
-         * Agora logSnapshot é explicitamente List<String>.
+         * CORREÇÃO:
          *
-         * Não existe acesso ao MutableStateList nesta função.
+         * Não usar:
+         *
+         * for (log: String in logSnapshot)
+         *
+         * O tipo já é inferido pela List<String>.
          */
-        for (log: String in logSnapshot) {
+
+        for (log in logSnapshot) {
 
             builder.append(log)
 
@@ -1155,9 +1130,10 @@ class MainActivity : ComponentActivity() {
     private fun saveLogToDownloads() {
 
         /*
-         * O botão chama esta função na UI thread.
+         * Esta função começa na UI thread.
          *
-         * O WebView é acessado SOMENTE aqui.
+         * O WebView é acessado somente antes de
+         * iniciar a thread de gravação.
          */
 
         runOnUiThread {
@@ -1170,22 +1146,21 @@ class MainActivity : ComponentActivity() {
                         ?.userAgentString
                         ?: "N/D"
 
-                /*
-                 * Fazemos uma cópia da lista enquanto estamos
-                 * na UI thread.
-                 */
                 val logSnapshot: List<String> =
                     logs.toList()
 
-                /*
-                 * Criamos todo o conteúdo antes de iniciar
-                 * a thread de gravação.
-                 */
                 val reportContent =
                     buildCompleteLog(
                         userAgent = userAgent,
                         logSnapshot = logSnapshot
                     )
+
+                /*
+                 * Daqui para frente a thread recebe apenas
+                 * String imutável.
+                 *
+                 * Nenhum WebView é acessado.
+                 */
 
                 Thread {
 
@@ -1345,10 +1320,6 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            /*
-             * Somente agora, depois da gravação,
-             * voltamos para UI thread.
-             */
             runOnUiThread {
 
                 lastSavedFileName =
@@ -1388,12 +1359,6 @@ class MainActivity : ComponentActivity() {
     // ============================================================
 
     private fun copyLogsToClipboard() {
-
-        /*
-         * Botão da interface = UI thread.
-         *
-         * Portanto podemos obter o User-Agent do WebView aqui.
-         */
 
         runOnUiThread {
 
@@ -1454,7 +1419,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
 
         /*
-         * onResume já ocorre na UI thread.
+         * onResume ocorre na UI thread.
          */
         webViewInstance?.onResume()
     }
@@ -1462,7 +1427,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
 
         /*
-         * onPause já ocorre na UI thread.
+         * onPause ocorre na UI thread.
          */
         webViewInstance?.onPause()
 
@@ -1721,3 +1686,30 @@ fun ConsoleView(
         }
     }
 }
+
+
+
+Esse arquivo já corrige o erro:
+
+
+Syntax error: Parameters must have type annotation.
+
+
+
+especificamente substituindo:
+
+
+for (log: String in logSnapshot)
+
+
+
+por:
+
+
+for (log in logSnapshot)
+
+
+
+Também mantém a proteção contra o problema anterior de WebView sendo acessada pela Thread-4, especialmente no evaluateJavascript() e na geração/salvamento do relatório.
+
+
