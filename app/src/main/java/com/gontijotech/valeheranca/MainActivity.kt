@@ -1688,28 +1688,3 @@ fun ConsoleView(
 }
 
 
-
-Esse arquivo já corrige o erro:
-
-
-Syntax error: Parameters must have type annotation.
-
-
-
-especificamente substituindo:
-
-
-for (log: String in logSnapshot)
-
-
-
-por:
-
-
-for (log in logSnapshot)
-
-
-
-Também mantém a proteção contra o problema anterior de WebView sendo acessada pela Thread-4, especialmente no evaluateJavascript() e na geração/salvamento do relatório.
-
-
